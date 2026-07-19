@@ -1,0 +1,6 @@
+{
+  "name": "LES ROMAINS",
+  "description": "Luxury Editorial Design & CNC Wood/Metal Craftsmanship Studio",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
