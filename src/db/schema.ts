@@ -33,6 +33,9 @@ export const settings = pgTable('settings', {
   seoDescription: text('seo_description').notNull(),
   seoKeywords: text('seo_keywords').notNull(),
   contactEmail: text('contact_email').notNull(),
+  quoteValidityDays: integer('quote_validity_days').default(15),
+  termsAndConditions: text('terms_and_conditions'),
+  termsAndConditionsAr: text('terms_and_conditions_ar'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -134,7 +137,7 @@ export const testimonials = pgTable('testimonials', {
 
 // 8. Quotes (Quotation Requests CRM) table
 export const quotes = pgTable('quotes', {
-  id: text('id').primaryKey(), // e.g. 'Q-1001'
+  id: text('id').primaryKey(), // e.g. 'LR-2026-00125'
   name: text('name').notNull(),
   email: text('email').notNull(),
   phone: text('phone').notNull(),
@@ -142,7 +145,9 @@ export const quotes = pgTable('quotes', {
   serviceId: text('service_id'),
   dimensions: text('dimensions'),
   message: text('message').notNull(),
-  status: text('status').default('pending').notNull(), // 'pending' | 'reviewed' | 'completed'
+  status: text('status').default('created').notNull(), // 'created'|'reviewed'|'approved'|'production'|'installation'|'completed'
+  statusHistory: text('status_history'), // JSON string: [{status, date}]
+  quoteItems: text('quote_items'), // JSON string: [{description, quantity, unitPrice}] — for the official PDF
   budget: text('budget'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   responseMessage: text('response_message'), // Admin response message

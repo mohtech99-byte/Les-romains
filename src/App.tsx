@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './store/AppContext';
 import { Navigation } from './components/Navigation';
 import { Footer } from './components/Footer';
@@ -13,6 +13,7 @@ import { QuoteForm } from './components/QuoteForm';
 import { Dashboard } from './components/Dashboard';
 import { BeforeAfter } from './components/BeforeAfter';
 import { PublicWorkshopEstimator } from './components/PublicWorkshopEstimator';
+import { TrackOrder } from './components/TrackOrder';
 import { 
   Home, Store, Cpu, Flame, Layers, Coffee, Compass, ShieldCheck, 
   Award, Phone, Mail, MapPin, Clock, ArrowRight, Lock, Star, Sliders, CheckCircle2,
@@ -29,6 +30,19 @@ const MainAppContent: React.FC = () => {
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // Deep-link support: /?track=LR-2026-00125 jumps straight to the tracking
+  // page with the ID prefilled (used by the QR code on the official PDF).
+  const [trackInitialId, setTrackInitialId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trackParam = params.get('track');
+    if (trackParam) {
+      setTrackInitialId(trackParam);
+      setCurrentView('track');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Admin login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -726,6 +740,18 @@ const MainAppContent: React.FC = () => {
               exit={{ opacity: 0 }}
             >
               <PublicWorkshopEstimator />
+            </motion.div>
+          )}
+
+          {/* VIEW: TRACK ORDER (public) */}
+          {currentView === 'track' && (
+            <motion.div
+              key="track"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <TrackOrder initialId={trackInitialId} />
             </motion.div>
           )}
 

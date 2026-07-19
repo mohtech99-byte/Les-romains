@@ -426,7 +426,7 @@ export const initialQuotes: QuoteRequest[] = [
     description: 'We need a full 3D geometric wood panel cladding for our new fashion showroom entrance in Mall of the Emirates. The structure must contain backlighting channels.',
     preferredContact: 'whatsapp',
     referenceImages: ['https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=400'],
-    status: 'pending',
+    status: 'created',
     date: '2026-07-10'
   }
 ];
@@ -477,7 +477,11 @@ export const initialSettings: AppSettings = {
   redirectRules: '/old-about -> /about\n/services-old -> /services',
   googleMapsUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d102927.42082260656!2d6.113402422533611!3d35.55160867746175!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x12f409acdc26cd8b%3A0x6b7dbb858448ec6d!2sBatna%2C%20Algeria!5e0!3m2!1sen!2s!4v1700000000000!5m2!1sen!2s',
   footerText: 'Les Romains Decorative CNC Manufacturing Studio - Batna, Algeria.',
-  footerTextAr: 'ليز رومان لتصنيع الديكورات بتقنية CNC - باتنة، الجزائر.'
+  footerTextAr: 'ليز رومان لتصنيع الديكورات بتقنية CNC - باتنة، الجزائر.',
+
+  quoteValidityDays: 15,
+  termsAndConditions: '1. This quotation is an estimate based on the information provided and is subject to confirmation after a detailed site or design review.\n2. Prices are quoted in Algerian Dinar (DZD) and exclude any applicable taxes unless stated otherwise.\n3. A deposit may be required before production begins.\n4. Delivery and installation timelines are estimates and may vary based on material availability and project complexity.\n5. This quotation is valid for the period stated above from its issue date.',
+  termsAndConditionsAr: '١. هذا العرض تقديري بناءً على المعطيات المقدمة، ويخضع للتأكيد بعد دراسة تفصيلية للموقع أو التصميم.\n٢. الأسعار محسوبة بالدينار الجزائري ولا تشمل أي ضرائب مطبقة ما لم يُذكر خلاف ذلك.\n٣. قد يُطلب دفع عربون قبل بدء التصنيع.\n٤. مدة التسليم والتركيب تقديرية وقد تختلف حسب توفر المواد وتعقيد المشروع.\n٥. هذا العرض صالح للمدة المذكورة أعلاه ابتداءً من تاريخ إصداره.'
 };
 
 // -----------------------------------------------------------------------------

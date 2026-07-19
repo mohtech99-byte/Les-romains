@@ -93,6 +93,21 @@ export interface BlogPost {
   tags: string[];
 }
 
+// Order pipeline — admin sees all 6 stages with dates; the public tracking
+// page collapses 'reviewed'+'approved' into a single "Under Review" step.
+export type QuoteStatus = 'created' | 'reviewed' | 'approved' | 'production' | 'installation' | 'completed';
+
+export interface QuoteStatusEvent {
+  status: QuoteStatus;
+  date: string;
+}
+
+export interface QuoteLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export interface QuoteRequest {
   id: string;
   name: string;
@@ -105,10 +120,22 @@ export interface QuoteRequest {
   dimensions?: string;
   preferredContact: 'email' | 'phone' | 'whatsapp';
   referenceImages: string[];
-  status: 'pending' | 'reviewed' | 'completed';
+  status: QuoteStatus;
+  statusHistory?: QuoteStatusEvent[];
+  quoteItems?: QuoteLineItem[];
   date: string;
 
   responseMessage?: string;
+}
+
+// Public-safe subset returned by the tracking endpoint — no contact info,
+// no description, no budget, no line-item pricing.
+export interface TrackedQuote {
+  id: string;
+  projectType: string;
+  status: QuoteStatus;
+  statusHistory: QuoteStatusEvent[];
+  date: string;
 }
 
 export interface AppSettings {
@@ -157,6 +184,11 @@ export interface AppSettings {
   googleMapsUrl?: string;
   footerText?: string;
   footerTextAr?: string;
+
+  // Official quotation PDF
+  quoteValidityDays?: number;
+  termsAndConditions?: string;
+  termsAndConditionsAr?: string;
 }
 
 // Pricing Estimator: materials, project-type multipliers, complexity

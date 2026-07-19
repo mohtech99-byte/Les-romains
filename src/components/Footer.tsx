@@ -33,20 +33,7 @@ export const Footer: React.FC = () => {
           
           {/* Column 1: Brand */}
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10 flex items-center justify-center rounded-none border border-accent/25 bg-zinc-950/50 overflow-hidden shrink-0">
-                <svg
-                  viewBox="0 0 100 100"
-                  className="w-7 h-7 text-accent fill-none stroke-accent"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M 32 25 L 32 75 L 68 75" strokeWidth="6" />
-                  <path d="M 46 25 L 68 25 C 78 25, 78 50, 68 50 L 46 50 M 60 50 L 72 75" strokeWidth="6" />
-                  <line x1="50" y1="15" x2="50" y2="85" strokeWidth="1" strokeDasharray="3,3" className="stroke-accent/40" />
-                </svg>
-              </div>
+            <div className="flex items-center gap-2">
               <span className="font-serif text-xl font-bold tracking-[0.25em] text-white">
                 LES ROMAINS
               </span>
@@ -164,6 +151,11 @@ export const Footer: React.FC = () => {
                   {isRtl ? 'كتالوج المنتجات' : 'Product Catalog'}
                 </button>
               </li>
+              <li>
+                <button onClick={() => { setCurrentView('track'); window.scrollTo({top:0, behavior:'smooth'}); }} className="hover:text-accent transition-colors">
+                  {isRtl ? 'تتبع طلبك' : 'Track Your Order'}
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -183,7 +175,7 @@ export const Footer: React.FC = () => {
               <li className="flex items-start gap-2.5">
                 <Phone className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الرئيسية (ساجد شباكي)' : 'PRIMARY (SADJED CHEBAKI)'}</span>
+                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الرئيسية (ساجد شيباكي)' : 'PRIMARY (SADJED CHEBAKI)'}</span>
                   <div className="flex flex-col font-mono text-[11px] space-y-0.5">
                     <a href="tel:+213675858793" className="hover:text-accent transition-colors">+213 (0) 675 858 793</a>
                     <a href="tel:+213552851836" className="hover:text-accent transition-colors">+213 (0) 552 851 836</a>

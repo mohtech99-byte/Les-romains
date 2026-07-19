@@ -5,11 +5,21 @@ import {
   FileText, Briefcase, ShoppingBag, Settings, Trash2, Plus, Check, CheckCircle, 
   RefreshCw, Save, TrendingUp, Users, DollarSign, Lock, Unlock, Mail, Image, 
   Layout, Heart, Upload, Folder, Shield, Activity, Database, Search, ArrowUp, 
-  ArrowDown, Edit, Eye, Download, Star, Copy, ExternalLink, Archive, Calculator, ToggleLeft, ToggleRight, Wrench
+  ArrowDown, Edit, Eye, Download, Star, Copy, ExternalLink, Archive, Calculator, ToggleLeft, ToggleRight, Wrench,
+  CheckCircle2, Circle, FileDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { WorkshopEstimator } from './workshop/WorkshopEstimator.tsx';
+
+const ORDER_STAGES: { key: string; label: string; labelAr: string }[] = [
+  { key: 'created', label: 'Created', labelAr: 'تم الإنشاء' },
+  { key: 'reviewed', label: 'Reviewed', labelAr: 'تمت المراجعة' },
+  { key: 'approved', label: 'Approved', labelAr: 'معتمد' },
+  { key: 'production', label: 'Production', labelAr: 'قيد الإنتاج' },
+  { key: 'installation', label: 'Installation', labelAr: 'التركيب' },
+  { key: 'completed', label: 'Completed', labelAr: 'مكتمل' },
+];
 
 export const Dashboard: React.FC = () => {
   const {
@@ -39,6 +49,7 @@ export const Dashboard: React.FC = () => {
     saveTestimonial,
     deleteTestimonial,
     updateQuoteStatusAndReply,
+    saveQuoteLineItems,
     updateMessageStatus,
     deleteMessage,
     uploadMedia,
@@ -108,7 +119,7 @@ export const Dashboard: React.FC = () => {
   });
 
   // Services, Blog, Testimonial selected sub-types
-  const [activeContentSub, setActiveContentSub] = useState<'homepage' | 'services' | 'blog' | 'testimonials'>('homepage');
+  const [activeContentSub, setActiveContentSub] = useState<'homepage' | 'services' | 'blog' | 'testimonials' | 'quotation'>('homepage');
   const [blogForm, setBlogForm] = useState<Omit<BlogPost, 'id'>>({
     title: '', titleAr: '', excerpt: '', excerptAr: '', content: '', contentAr: '',
     category: 'CNC Tips', categoryAr: 'إرشادات', author: 'Sadjed Chebaki', authorAr: 'ساجد شيباكي',
@@ -124,6 +135,9 @@ export const Dashboard: React.FC = () => {
   const [activeQuoteId, setActiveQuoteId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplySent, setIsReplySent] = useState(false);
+  const [quoteLineItems, setQuoteLineItems] = useState<{ description: string; quantity: number; unitPrice: number }[]>([]);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [advancingStage, setAdvancingStage] = useState(false);
 
   // File uploading trigger
   const handleFileUploadTrigger = () => {
@@ -312,7 +326,7 @@ export const Dashboard: React.FC = () => {
           { id: 'pricing', label: 'Pricing & Materials', labelAr: 'الأسعار والمواد', icon: Calculator },
           { id: 'workshop', label: 'Workshop Estimator', labelAr: 'حاسبة الورشة', icon: Wrench },
           { id: 'workshop-pricing', label: 'Workshop Pricing', labelAr: 'أسعار الورشة', icon: Settings },
-          { id: 'quotes', label: 'CRM & Inbox Enquiries', labelAr: 'صندوق طلبات التسعير', icon: Mail, badge: quotes.filter(q => q.status === 'pending').length },
+          { id: 'quotes', label: 'CRM & Inbox Enquiries', labelAr: 'صندوق طلبات التسعير', icon: Mail, badge: quotes.filter(q => q.status === 'created').length },
           { id: 'system', label: 'System, Media & Security', labelAr: 'أمان، وسائط والملفات', icon: Shield }
         ].map(tab => (
           <button
@@ -365,7 +379,7 @@ export const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { title: 'Potential pipeline', titleAr: 'مبيعات تقديرية', value: `$${(quotes.length * 14800).toLocaleString()}`, icon: DollarSign, trend: '+14.5%', color: 'text-accent border-accent/20 bg-accent/5' },
-                { title: 'Pending quotations', titleAr: 'عروض معلقة مالي', value: quotes.filter(q => q.status === 'pending').length, icon: FileText, trend: 'Awaiting reply', color: 'border-accent/30 bg-accent/5 text-accent' },
+                { title: 'Pending quotations', titleAr: 'عروض معلقة مالي', value: quotes.filter(q => q.status === 'created').length, icon: FileText, trend: 'Awaiting reply', color: 'border-accent/30 bg-accent/5 text-accent' },
                 { title: 'Active projects', titleAr: 'المشاريع المنشورة', value: projects.length, icon: Briefcase, trend: '100% Quality spec', color: 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-950/10 text-gray-800 dark:text-gray-200' },
                 { title: 'Media Assets', titleAr: 'ملفات الوسائط', value: mediaFiles.length, icon: Image, trend: 'Cloud Storage', color: 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-950/10 text-gray-800 dark:text-gray-200' }
               ].map((m, i) => (
@@ -461,7 +475,8 @@ export const Dashboard: React.FC = () => {
                 { id: 'homepage', label: 'Homepage Hero & Stats', labelAr: 'الواجهة الأمامية والإحصائيات' },
                 { id: 'services', label: 'Services CMS', labelAr: 'إدارة الخدمات المعمارية' },
                 { id: 'blog', label: 'Blog & Articles', labelAr: 'المقالات والأفكار' },
-                { id: 'testimonials', label: 'Testimonials CRUD', labelAr: 'آراء العملاء' }
+                { id: 'testimonials', label: 'Testimonials CRUD', labelAr: 'آراء العملاء' },
+                { id: 'quotation', label: 'Quotation PDF Settings', labelAr: 'إعدادات عرض السعر PDF' }
               ].map(sub => (
                 <button
                   key={sub.id}
@@ -810,6 +825,69 @@ export const Dashboard: React.FC = () => {
                   </button>
                 </form>
               </div>
+            )}
+
+            {/* Quotation PDF Settings */}
+            {activeContentSub === 'quotation' && (
+              <form onSubmit={handleApplySettings} className="space-y-6">
+                <div className="bg-gray-50 dark:bg-gray-950 p-5 rounded-none border border-gray-150 dark:border-gray-900 space-y-4">
+                  <span className="text-[10px] font-mono font-bold text-accent uppercase tracking-wider block">
+                    {isRtl ? 'إعدادات عرض السعر الرسمي (PDF)' : 'OFFICIAL QUOTATION PDF SETTINGS'}
+                  </span>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl
+                      ? 'هذه القيم تظهر في كل ملف PDF يتم إنشاؤه من نافذة إدارة طلبات التسعير.'
+                      : 'These values appear on every PDF generated from the Quotes CRM panel.'}
+                  </p>
+
+                  <div>
+                    <label className="text-[10px] uppercase text-gray-400 font-mono block mb-1">
+                      {isRtl ? 'مدة صلاحية العرض (بالأيام)' : 'Quote Validity Period (days)'}
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={settingsForm.quoteValidityDays ?? 15}
+                      onChange={e => setSettingsForm({ ...settingsForm, quoteValidityDays: parseInt(e.target.value) || 15 })}
+                      className="w-full sm:w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none px-3 py-2 text-xs text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase text-gray-400 font-mono block mb-1">
+                      {isRtl ? 'الشروط والأحكام (تُطبع في PDF بالإنجليزية فقط)' : 'Terms & Conditions (printed on the PDF, English only)'}
+                    </label>
+                    <textarea
+                      rows={7}
+                      value={settingsForm.termsAndConditions || ''}
+                      onChange={e => setSettingsForm({ ...settingsForm, termsAndConditions: e.target.value })}
+                      className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none px-3 py-2 text-xs text-gray-900 dark:text-white font-mono leading-relaxed"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1.5">
+                      {isRtl
+                        ? 'ملاحظة: النصوص العربية لا تُعرض بشكل صحيح في مكتبة PDF المستخدمة حالياً (الحروف تنفصل ولا تترابط)، لذلك يُطبع عرض السعر بالإنجليزية فقط مهما كانت لغة الموقع.'
+                        : 'Note: the PDF library currently used cannot shape Arabic script correctly (letters render disconnected), so the quotation always prints in English regardless of site language.'}
+                    </p>
+                  </div>
+
+                  <div className="opacity-50 pointer-events-none">
+                    <label className="text-[10px] uppercase text-gray-400 font-mono block mb-1">
+                      {isRtl ? 'الشروط بالعربية (محفوظة، غير مستخدمة في PDF حالياً)' : 'Terms & Conditions — Arabic (stored, not yet used in the PDF)'}
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={settingsForm.termsAndConditionsAr || ''}
+                      onChange={e => setSettingsForm({ ...settingsForm, termsAndConditionsAr: e.target.value })}
+                      dir="rtl"
+                      className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none px-3 py-2 text-xs text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  <button type="submit" className="px-4 py-2 bg-accent text-black font-bold text-[10px] tracking-wider uppercase font-mono rounded hover:bg-accent-dark transition-all">
+                    {isRtl ? 'حفظ الإعدادات' : 'Save Quotation Settings'}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         )}
@@ -1425,15 +1503,21 @@ export const Dashboard: React.FC = () => {
                       <td className="p-4 text-gray-400">{q.date}</td>
                       <td className="p-4">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase font-bold border ${
-                          q.status === 'pending' ? 'bg-accent/10 text-accent border-accent/25 animate-pulse' :
-                          q.status === 'reviewed' ? 'bg-stone-500/10 text-stone-400 border-stone-500/20' :
+                          q.status === 'created' ? 'bg-accent/10 text-accent border-accent/25 animate-pulse' :
+                          q.status === 'reviewed' || q.status === 'approved' ? 'bg-stone-500/10 text-stone-400 border-stone-500/20' :
+                          q.status === 'production' || q.status === 'installation' ? 'bg-blue-500/10 text-blue-400 border-blue-500/25' :
                           'bg-emerald-500/10 text-emerald-500 border-emerald-500/25'
                         }`}>
                           {q.status}
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        <button onClick={() => { setActiveQuoteId(q.id); setReplyText(q.responseMessage || ''); setIsReplySent(false); }} className="px-3 py-1 bg-accent/15 border border-accent/30 text-accent hover:bg-accent hover:text-black font-mono text-[10px] uppercase font-bold rounded transition-all">
+                        <button onClick={() => {
+                          setActiveQuoteId(q.id);
+                          setReplyText(q.responseMessage || '');
+                          setIsReplySent(false);
+                          setQuoteLineItems(q.quoteItems && q.quoteItems.length > 0 ? q.quoteItems : [{ description: q.projectType, quantity: 1, unitPrice: 0 }]);
+                        }} className="px-3 py-1 bg-accent/15 border border-accent/30 text-accent hover:bg-accent hover:text-black font-mono text-[10px] uppercase font-bold rounded transition-all">
                           Review
                         </button>
                       </td>
@@ -1446,9 +1530,9 @@ export const Dashboard: React.FC = () => {
             {/* Response CRM Modal */}
             <AnimatePresence>
               {activeQuoteId && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-6 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-900 rounded-lg space-y-4">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-6 bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-900 rounded-lg space-y-6">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono tracking-widest text-accent font-bold uppercase">SECURE PROPOSAL DRAFT & BROADCAST (MAILCLIENT-SMOOTH)</span>
+                    <span className="text-[10px] font-mono tracking-widest text-accent font-bold uppercase">ORDER FILE — {activeQuoteId}</span>
                     <button onClick={() => setActiveQuoteId(null)} className="text-gray-400 hover:text-white font-bold text-xs uppercase tracking-wider">Close Panel [X]</button>
                   </div>
 
@@ -1463,9 +1547,104 @@ export const Dashboard: React.FC = () => {
                     <p className="text-gray-800 dark:text-gray-300 italic p-2 bg-gray-50 dark:bg-gray-950 rounded border">"{quotes.find(q=>q.id===activeQuoteId)?.description}"</p>
                   </div>
 
+                  {/* Order Timeline */}
+                  <div className="space-y-3">
+                    <span className="text-[9px] uppercase font-mono text-gray-400 block">{isRtl ? 'مسار الطلب' : 'Order Timeline'}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {(() => {
+                        const activeQuote = quotes.find(q => q.id === activeQuoteId);
+                        const currentIdx = ORDER_STAGES.findIndex(s => s.key === activeQuote?.status);
+                        return ORDER_STAGES.map((stage, idx) => {
+                          const historyEntry = activeQuote?.statusHistory?.find(h => h.status === stage.key);
+                          const reached = idx <= currentIdx;
+                          return (
+                            <button
+                              key={stage.key}
+                              disabled={advancingStage}
+                              onClick={async () => {
+                                if (idx === currentIdx) return;
+                                setAdvancingStage(true);
+                                try {
+                                  await updateQuoteStatusAndReply(activeQuoteId, stage.key as any, replyText);
+                                  addAuditLog(`Moved quote ${activeQuoteId} to stage ${stage.key}`, `تم نقل الطلب ${activeQuoteId} إلى مرحلة ${stage.labelAr}`);
+                                } catch { alert('Failed to advance stage'); }
+                                finally { setAdvancingStage(false); }
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded border text-[10px] font-mono uppercase tracking-wider transition-all disabled:opacity-50 ${
+                                reached ? 'bg-accent/10 border-accent/40 text-accent' : 'border-gray-200 dark:border-gray-800 text-gray-400 hover:border-accent/40 hover:text-accent'
+                              }`}
+                            >
+                              {reached ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
+                              <span>
+                                {isRtl ? stage.labelAr : stage.label}
+                                {historyEntry && <span className="block text-[8px] opacity-70 normal-case">{new Date(historyEntry.date).toLocaleDateString()}</span>}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="block text-[9px] uppercase font-mono text-gray-400">Response Email / WhatsApp Proposal Body</label>
-                    <textarea rows={5} value={replyText} onChange={e=>setReplyText(e.target.value)} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded p-3 text-xs font-mono text-gray-900 dark:text-white focus:outline-none" />
+                    <textarea rows={4} value={replyText} onChange={e=>setReplyText(e.target.value)} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded p-3 text-xs font-mono text-gray-900 dark:text-white focus:outline-none" />
+                  </div>
+
+                  {/* Line items editor for the official PDF */}
+                  <div className="space-y-3">
+                    <span className="text-[9px] uppercase font-mono text-gray-400 block">{isRtl ? 'بنود السعر (لملف PDF)' : 'Pricing Line Items (for PDF)'}</span>
+                    <div className="space-y-2">
+                      {quoteLineItems.map((item, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                          <input
+                            value={item.description}
+                            onChange={e => setQuoteLineItems(prev => prev.map((it, i) => i === idx ? { ...it, description: e.target.value } : it))}
+                            placeholder="Description"
+                            className="col-span-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs rounded p-2 text-gray-900 dark:text-white"
+                          />
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={e => setQuoteLineItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: parseFloat(e.target.value) || 0 } : it))}
+                            placeholder="Qty"
+                            className="col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs rounded p-2 text-gray-900 dark:text-white"
+                          />
+                          <input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={e => setQuoteLineItems(prev => prev.map((it, i) => i === idx ? { ...it, unitPrice: parseFloat(e.target.value) || 0 } : it))}
+                            placeholder="Unit Price (DZD)"
+                            className="col-span-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs rounded p-2 text-gray-900 dark:text-white"
+                          />
+                          <button
+                            onClick={() => setQuoteLineItems(prev => prev.filter((_, i) => i !== idx))}
+                            className="col-span-1 p-2 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setQuoteLineItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }])}
+                        className="inline-flex items-center gap-1 text-[10px] font-mono uppercase text-accent hover:text-accent-dark"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> {isRtl ? 'إضافة بند' : 'Add Line'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await saveQuoteLineItems(activeQuoteId, quoteLineItems);
+                            addAuditLog(`Updated pricing line items for ${activeQuoteId}`, `تم تحديث بنود السعر لـ ${activeQuoteId}`);
+                          } catch { alert('Failed to save line items'); }
+                        }}
+                        className="text-[10px] font-mono uppercase text-gray-400 hover:text-accent"
+                      >
+                        {isRtl ? 'حفظ البنود' : 'Save Line Items'}
+                      </button>
+                    </div>
                   </div>
 
                   {isReplySent ? (
@@ -1474,7 +1653,7 @@ export const Dashboard: React.FC = () => {
                       {isRtl ? 'تم إرسال المقترح الفني والمالي بنجاح إلى البريد والواتساب!' : 'Atelier response dispatched and quote updated to reviewed status successfully!'}
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button onClick={async () => {
                         try {
                           await updateQuoteStatusAndReply(activeQuoteId, 'reviewed', replyText);
@@ -1492,6 +1671,24 @@ export const Dashboard: React.FC = () => {
                         } catch (e) { alert('Failed to complete quote'); }
                       }} className="px-5 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-widest border border-gray-300 rounded hover:bg-gray-100 transition-all">
                         {isRtl ? 'اعتماد وإغلاق كصفقة مكتملة' : 'Close and Mark Completed'}
+                      </button>
+                      <button
+                        disabled={generatingPdf}
+                        onClick={async () => {
+                          const activeQuote = quotes.find(q => q.id === activeQuoteId);
+                          if (!activeQuote) return;
+                          setGeneratingPdf(true);
+                          try {
+                            const { generateQuotePdf } = await import('../lib/generateQuotePdf.ts');
+                            await generateQuotePdf({ ...activeQuote, quoteItems: quoteLineItems }, settings);
+                            addAuditLog(`Generated official PDF for ${activeQuoteId}`, `تم إنشاء عرض PDF رسمي لـ ${activeQuoteId}`);
+                          } catch { alert('Failed to generate PDF'); }
+                          finally { setGeneratingPdf(false); }
+                        }}
+                        className="px-5 py-2.5 bg-gray-900 hover:bg-black text-accent border border-accent/40 font-semibold text-xs uppercase tracking-widest rounded transition-all inline-flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <FileDown className="w-4 h-4" />
+                        {generatingPdf ? (isRtl ? 'جارٍ الإنشاء...' : 'Generating...') : (isRtl ? 'إنشاء عرض PDF رسمي' : 'Generate Official PDF')}
                       </button>
                     </div>
                   )}

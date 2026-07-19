@@ -1107,11 +1107,19 @@ app.delete('/api/testimonials/:id', requireAuth, requireRole(['admin', 'manager'
 app.get('/api/quotes', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
   try {
     const rows = await db.select().from(quotes).orderBy(desc(quotes.createdAt));
-    const mapped = rows.map(row => ({
-      ...row,
-      description: row.message,
-      date: row.createdAt,
-    }));
+    const mapped = rows.map(row => {
+      let statusHistory: { status: string; date: string }[] = [];
+      try { statusHistory = JSON.parse(row.statusHistory || '[]'); } catch { statusHistory = []; }
+      let quoteItems: { description: string; quantity: number; unitPrice: number }[] = [];
+      try { quoteItems = JSON.parse(row.quoteItems || '[]'); } catch { quoteItems = []; }
+      return {
+        ...row,
+        description: row.message,
+        date: row.createdAt,
+        statusHistory,
+        quoteItems,
+      };
+    });
     res.json(mapped);
   } catch (error) {
     console.error('Error fetching quotes:', error);
@@ -1122,12 +1130,20 @@ app.get('/api/quotes', requireAuth, requireRole(['admin', 'manager']), async (re
 app.post('/api/quotes', publicWriteLimiter, async (req, res) => {
   try {
     const { name, email, phone, city, projectType, serviceId, dimensions, message, description, budget } = req.body;
-    const id = `Q-${Date.now().toString().slice(-6)}`;
+
+    // Tracking ID format: LR-{year}-{5-digit sequential} e.g. LR-2026-00125
+    const year = new Date().getFullYear();
+    const existingThisYear = await db.select().from(quotes);
+    const countThisYear = existingThisYear.filter(q => q.id.startsWith(`LR-${year}-`)).length;
+    const id = `LR-${year}-${String(countThisYear + 1).padStart(5, '0')}`;
+
     const combinedMessage = [
       city ? `Location: ${city}` : null,
       description || message || ''
     ].filter(Boolean).join('\n\n');
-    
+
+    const statusHistory = JSON.stringify([{ status: 'created', date: new Date().toISOString() }]);
+
     const inserted = await db.insert(quotes)
       .values({
         id,
@@ -1139,7 +1155,8 @@ app.post('/api/quotes', publicWriteLimiter, async (req, res) => {
         dimensions: dimensions || null,
         message: combinedMessage,
         budget: budget || null,
-        status: 'pending',
+        status: 'created',
+        statusHistory,
       })
       .returning();
 
@@ -1150,15 +1167,68 @@ app.post('/api/quotes', publicWriteLimiter, async (req, res) => {
   }
 });
 
-// Admin reply/update quote
+// Public order tracking — the ONLY quote endpoint reachable without auth.
+// Returns strictly non-sensitive fields: no name, email, phone, budget, or
+// description. Rate-limited like other public write-adjacent endpoints to
+// deter ID enumeration.
+app.get('/api/quotes/track/:id', publicWriteLimiter, async (req, res) => {
+  try {
+    const rows = await db.select().from(quotes).where(eq(quotes.id, req.params.id)).limit(1);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Tracking number not found' });
+    }
+    const row = rows[0];
+    let statusHistory: { status: string; date: string }[] = [];
+    try { statusHistory = JSON.parse(row.statusHistory || '[]'); } catch { statusHistory = []; }
+
+    res.json({
+      id: row.id,
+      projectType: row.projectType,
+      status: row.status,
+      statusHistory,
+      date: row.createdAt,
+    });
+  } catch (error) {
+    console.error('Error tracking quote:', error);
+    res.status(500).json({ error: 'Failed to look up tracking number' });
+  }
+});
+
+// Admin reply/update quote — advances the pipeline and appends to
+// statusHistory whenever the status actually changes.
 app.put('/api/quotes/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
   try {
-    const { status, responseMessage } = req.body;
+    const { status, responseMessage, quoteItems } = req.body;
+
+    const existingRows = await db.select().from(quotes).where(eq(quotes.id, req.params.id)).limit(1);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: 'Quote not found' });
+    }
+    const existing = existingRows[0];
+
+    let statusHistory: { status: string; date: string }[] = [];
+    try { statusHistory = JSON.parse(existing.statusHistory || '[]'); } catch { statusHistory = []; }
+    if (status && status !== existing.status) {
+      statusHistory.push({ status, date: new Date().toISOString() });
+    }
+
+    const updatePayload: Record<string, any> = { statusHistory: JSON.stringify(statusHistory) };
+    if (status) updatePayload.status = status;
+    if (typeof responseMessage === 'string') updatePayload.responseMessage = responseMessage;
+    if (quoteItems) updatePayload.quoteItems = JSON.stringify(quoteItems);
+
     const updated = await db.update(quotes)
-      .set({ status, responseMessage })
+      .set(updatePayload)
       .where(eq(quotes.id, req.params.id))
       .returning();
-    res.json(updated[0]);
+
+    const row = updated[0];
+    let parsedHistory: { status: string; date: string }[] = [];
+    try { parsedHistory = JSON.parse(row.statusHistory || '[]'); } catch { parsedHistory = []; }
+    let parsedItems: { description: string; quantity: number; unitPrice: number }[] = [];
+    try { parsedItems = JSON.parse(row.quoteItems || '[]'); } catch { parsedItems = []; }
+
+    res.json({ ...row, description: row.message, date: row.createdAt, statusHistory: parsedHistory, quoteItems: parsedItems });
   } catch (error) {
     console.error('Error updating quote:', error);
     res.status(500).json({ error: 'Failed to update quotation' });

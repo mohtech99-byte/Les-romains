@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase.ts';
-import { Service, PortfolioProject, CNCProduct, Testimonial, BlogPost, QuoteRequest, AppSettings, PricingFactor, WorkshopPricingItem, WorkshopEstimation, WorkshopOptionItem, ActivityLog } from '../types';
+import { Service, PortfolioProject, CNCProduct, Testimonial, BlogPost, QuoteRequest, AppSettings, PricingFactor, WorkshopPricingItem, WorkshopEstimation, WorkshopOptionItem, ActivityLog, TrackedQuote } from '../types';
 import {
   initialServices,
   initialProjects,
@@ -12,7 +12,7 @@ import {
   initialPricingFactors
 } from '../data/initialData.ts';
 
-export type ViewType = 'home' | 'about' | 'services' | 'portfolio' | 'products' | 'workshop' | 'quote' | 'contact' | 'admin';
+export type ViewType = 'home' | 'about' | 'services' | 'portfolio' | 'products' | 'workshop' | 'quote' | 'track' | 'contact' | 'admin';
 
 export interface MediaAsset {
   id: number;
@@ -93,6 +93,8 @@ interface AppContextType {
   saveTestimonial: (testimonial: Testimonial) => Promise<any>;
   deleteTestimonial: (id: string) => Promise<any>;
   updateQuoteStatusAndReply: (id: string, status: QuoteRequest['status'], responseMessage?: string) => Promise<any>;
+  saveQuoteLineItems: (id: string, quoteItems: QuoteRequest['quoteItems']) => Promise<any>;
+  trackQuote: (id: string) => Promise<TrackedQuote | null>;
   updateMessageStatus: (id: string, status: ContactMessage['status']) => Promise<any>;
   deleteMessage: (id: string) => Promise<any>;
   uploadMedia: (file: File) => Promise<MediaAsset>;
@@ -667,11 +669,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       if (!res.ok) throw new Error('Failed to update quote status');
       const data = await res.json();
-      setQuotes(prev => prev.map(q => q.id === id ? { ...q, status, responseMessage: data.responseMessage } as any : q));
+      setQuotes(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
       return data;
     } catch (error) {
       console.error('Error updating quote status:', error);
       throw error;
+    }
+  };
+
+  const saveQuoteLineItems = async (id: string, quoteItems: QuoteRequest['quoteItems']) => {
+    try {
+      const res = await fetchWithAuth(`/api/quotes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ quoteItems }),
+      });
+      if (!res.ok) throw new Error('Failed to save quote line items');
+      const data = await res.json();
+      setQuotes(prev => prev.map(q => q.id === id ? { ...q, ...data } : q));
+      return data;
+    } catch (error) {
+      console.error('Error saving quote line items:', error);
+      throw error;
+    }
+  };
+
+  // Public order tracking — no auth, used by the customer-facing "Track your
+  // quotation" page. Returns null (rather than throwing) on a bad/unknown ID
+  // so the UI can show a friendly "not found" state.
+  const trackQuote = async (id: string): Promise<TrackedQuote | null> => {
+    try {
+      const res = await fetch(`/api/quotes/track/${encodeURIComponent(id)}`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (error) {
+      console.error('Error tracking quote:', error);
+      return null;
     }
   };
 
@@ -786,6 +818,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveTestimonial,
       deleteTestimonial,
       updateQuoteStatusAndReply,
+      saveQuoteLineItems,
+      trackQuote,
       updateMessageStatus,
       deleteMessage,
       uploadMedia,

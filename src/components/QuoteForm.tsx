@@ -9,13 +9,14 @@ import { Check, FileText, FileUp, Sparkles, User, Phone, Mail, MapPin } from 'lu
 import { motion } from 'motion/react';
 
 export const QuoteForm: React.FC = () => {
-  const { language, addQuote, settings, pricingFactors } = useApp();
+  const { language, addQuote, settings, pricingFactors, setCurrentView } = useApp();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
     city: '',
     projectType: 'Decorative Wall Panels',
+    budget: '$5,000 - $10,000',
     description: '',
     dimensions: '',
     preferredContact: 'email' as 'email' | 'phone' | 'whatsapp',
@@ -92,6 +93,33 @@ export const QuoteForm: React.FC = () => {
     { en: 'Custom-Made Decorative Design', ar: 'تصميم ديكوري مخصص بالكامل' }
   ];
 
+  const budgetTiers = [
+  {
+    en: 'Less than 30,000 DZD',
+    ar: 'أقل من 30,000 دج'
+  },
+  {
+    en: '30,000 - 100,000 DZD',
+    ar: '30,000 - 100,000 دج'
+  },
+  {
+    en: '100,000 - 300,000 DZD',
+    ar: '100,000 - 300,000 دج'
+  },
+  {
+    en: '300,000 - 1,000,000 DZD',
+    ar: '300,000 - 1,000,000 دج'
+  },
+  {
+    en: 'More than 1,000,000 DZD',
+    ar: 'أكثر من 1,000,000 دج'
+  },
+  {
+    en: 'Not sure',
+    ar: 'غير متأكد'
+  }
+];
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -138,6 +166,7 @@ export const QuoteForm: React.FC = () => {
       email: formData.email,
       city: formData.city,
       projectType: formData.projectType,
+      budget: formData.budget,
       description: formData.description,
       dimensions: formData.dimensions,
       preferredContact: formData.preferredContact,
@@ -317,7 +346,7 @@ export const QuoteForm: React.FC = () => {
                 </p>
                 <p className="text-xs text-gray-700 dark:text-gray-400">
                   {isRtl 
-                    ? 'تواصل مباشرة مع المالك ساجد شباكي أو عبد النور عبر الهاتف أو الواتساب:' 
+                    ? 'تواصل مباشرة مع المالك ساجد شيباكي أو عبد النور عبر الهاتف أو الواتساب:' 
                     : 'Get in touch directly with Sadjed Chebaki (Owner) or Abdenour via call/WhatsApp:'}
                 </p>
               </div>
@@ -436,7 +465,7 @@ export const QuoteForm: React.FC = () => {
               {isRtl ? '٢. مواصفات المشروع المعماري' : '02. Architectural Project Scope'}
             </h4>
 
-            <div className="grid grid-cols-1 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 font-medium">
                   {isRtl ? 'نوع المشروع' : 'Project Category'}
@@ -449,6 +478,23 @@ export const QuoteForm: React.FC = () => {
                   {projectTypes.map((type, idx) => (
                     <option key={idx} value={type.en}>
                       {isRtl ? type.ar : type.en}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 font-medium">
+                  {isRtl ? 'الميزانية المتوقعة' : 'Estimated Budget'}
+                </label>
+                <select
+                  value={formData.budget}
+                  onChange={e => setFormData({ ...formData, budget: e.target.value })}
+                  className="w-full bg-gray-50 dark:bg-gray-950/20 border border-gray-200 dark:border-gray-800 rounded-none px-3 py-3 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-accent"
+                >
+                  {budgetTiers.map((tier, idx) => (
+                    <option key={idx} value={tier.en}>
+                      {isRtl ? tier.ar : tier.en}
                     </option>
                   ))}
                 </select>
@@ -619,10 +665,8 @@ export const QuoteForm: React.FC = () => {
                 <span className="font-semibold text-gray-900 dark:text-white">{formData.projectType}</span>
               </div>
               <div>
-                <span className="text-[9px] text-gray-400 block uppercase font-mono">{isRtl ? 'السعر التقديري' : 'Estimated Price'}</span>
-                <span className="font-semibold text-accent">
-                  {estResult ? `${formatDzd(estResult.low)} - ${formatDzd(estResult.high)}` : (isRtl ? 'حسب الطلب' : 'Custom Quote')}
-                </span>
+                <span className="text-[9px] text-gray-400 block uppercase font-mono">{isRtl ? 'الميزانية' : 'Budget Band'}</span>
+                <span className="font-semibold text-accent">{formData.budget}</span>
               </div>
               <div>
                 <span className="text-[9px] text-gray-400 block uppercase font-mono">{isRtl ? 'الملفات المرفقة' : 'Files Enclosed'}</span>
@@ -663,6 +707,7 @@ export const QuoteForm: React.FC = () => {
                   email: '',
                   city: '',
                   projectType: 'Decorative Wall Panels',
+                  budget: '$5,000 - $10,000',
                   description: '',
                   dimensions: '',
                   preferredContact: 'email',
@@ -684,6 +729,13 @@ export const QuoteForm: React.FC = () => {
               </svg>
               {isRtl ? 'متابعة عبر واتساب' : 'Instantly Chat on WhatsApp'}
             </a>
+
+            <button
+              onClick={() => setCurrentView('track')}
+              className="px-6 py-3.5 border-2 border-accent text-accent hover:bg-accent hover:text-black text-xs font-semibold uppercase tracking-widest rounded-none flex items-center justify-center gap-2 transition-colors font-mono"
+            >
+              {isRtl ? 'تتبع طلبك الآن' : 'Track Your Order'}
+            </button>
           </div>
 
         </motion.div>
