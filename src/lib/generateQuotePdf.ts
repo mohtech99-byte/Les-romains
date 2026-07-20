@@ -27,9 +27,16 @@ export async function generateQuotePdf(quote: QuoteRequest, settings: AppSetting
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 40;
   const logo = await loadLogo();
+  // ===== Layout =====
+  const HEADER_HEIGHT = 100;
+  const TITLE_Y = 132;
+  const META_Y = 155;
+  const INFO_BOX_Y = 195;
+  const INFO_BOX_HEIGHT = 70;
+  const TABLE_Y = 290;
 
   // --- Header: logo + company info -----------------------------------------
-  doc.addImage(logo, 'PNG', margin, 32, 154, 44);
+  doc.addImage(logo, 'PNG', margin, 22, 58, 58);
 
   doc.setFontSize(9);
   doc.setTextColor(90);
@@ -45,13 +52,15 @@ export async function generateQuotePdf(quote: QuoteRequest, settings: AppSetting
 
   doc.setDrawColor(176, 141, 87);
   doc.setLineWidth(1);
-  doc.line(margin, 92, pageWidth - margin, 92);
+  doc.line(margin, HEADER_HEIGHT, pageWidth - margin, HEADER_HEIGHT);
 
   // --- Title + meta ----------------------------------------------------------
-  doc.setFontSize(20);
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.text('OFFICIAL QUOTATION', pageWidth / 2, TITLE_Y, {
+    align: 'center'
+});
   doc.setTextColor(15);
-  doc.text('OFFICIAL QUOTATION', margin, 122);
-
   const issueDate = new Date();
   const validityDays = settings.quoteValidityDays || 15;
   const expiryDate = new Date(issueDate.getTime() + validityDays * 86400000);
@@ -65,12 +74,17 @@ export async function generateQuotePdf(quote: QuoteRequest, settings: AppSetting
   doc.text(`Client: ${quote.name}`, pageWidth - margin, 145, { align: 'right' });
   doc.text(`Project: ${quote.projectType}`, pageWidth - margin, 160, { align: 'right' });
   if (quote.dimensions) doc.text(`Scope: ${quote.dimensions}`, pageWidth - margin, 175, { align: 'right' });
+  doc.setDrawColor(220);
+ // ===== Client Card =====
+const cardY = 200;
+const cardWidth = 230;
+const cardHeight = 70; 
 
   // --- QR code -> live tracking page -----------------------------------------
   const trackUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?track=${quote.id}`;
   const qrDataUrl = await QRCode.toDataURL(trackUrl, { margin: 1, width: 200, color: { dark: '#0F0F0F', light: '#FFFFFF' } });
   const qrSize = 78;
-  doc.addImage(qrDataUrl, 'PNG', pageWidth - margin - qrSize, 195, qrSize, qrSize);
+  doc.addImage(qrDataUrl, 'PNG', pageWidth - margin - qrSize, 185, qrSize, qrSize);
   doc.setFontSize(7);
   doc.setTextColor(130);
   doc.text('Scan to track your order', pageWidth - margin - qrSize / 2, 195 + qrSize + 10, { align: 'center' });
@@ -88,7 +102,7 @@ export async function generateQuotePdf(quote: QuoteRequest, settings: AppSetting
   const total = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
 
   autoTable(doc, {
-    startY: 300,
+    startY: 290,
     margin: { left: margin, right: margin },
     head: [['Description', 'Qty', 'Unit Price', 'Total']],
     body: rows,
@@ -96,7 +110,15 @@ export async function generateQuotePdf(quote: QuoteRequest, settings: AppSetting
     theme: 'grid',
     headStyles: { fillColor: [15, 15, 15], textColor: 255, fontSize: 9 },
     footStyles: { fillColor: [176, 141, 87], textColor: 20, fontSize: 10, fontStyle: 'bold' },
-    styles: { fontSize: 9, cellPadding: 7, textColor: 40 },
+    styles: {
+    fontSize: 10,
+    cellPadding: 8,
+    textColor: 40,
+    },
+
+    alternateRowStyles: {
+  fillColor: [248, 248, 248],
+    },
     columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
   });
 

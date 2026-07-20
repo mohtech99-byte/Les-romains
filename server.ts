@@ -357,15 +357,18 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
   try {
+    console.log('REQ BODY:', req.body);
     const rows = await db.select().from(settings).limit(1);
     if (rows.length === 0) {
       const inserted = await db.insert(settings).values(req.body).returning();
       return res.json(inserted[0]);
     } else {
+      const { id, createdAt, updatedAt, ...updateData } = req.body;
+
       const updated = await db.update(settings)
-        .set(req.body)
-        .where(eq(settings.id, rows[0].id))
-        .returning();
+      .set(updateData)
+      .where(eq(settings.id, rows[0].id))
+      .returning();
       res.json(updated[0]);
     }
   } catch (error) {
