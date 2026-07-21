@@ -6,14 +6,7 @@ import * as schema from './schema.ts';
 
 // Function to create a new connection pool.
 export const createPool = () => {
-  console.log({
-  host: process.env.SQL_HOST,
-  user: process.env.SQL_USER,
-  database: process.env.SQL_DB_NAME,
-  passwordExists: !!process.env.SQL_PASSWORD,
-});
-
-return new Pool({
+  return new Pool({
   host: process.env.SQL_HOST,
   port: Number(process.env.SQL_PORT || 5432),
   user: process.env.SQL_USER,

@@ -1,12 +1,6 @@
 import dotenv from 'dotenv';
 
 dotenv.config();
-console.log("SERVER ENV", {
-  host: process.env.SQL_HOST,
-  user: process.env.SQL_USER,
-  db: process.env.SQL_DB_NAME,
-  supabase: process.env.SUPABASE_URL,
-});
 import express from 'express';
 import path from 'path';
 import * as fs from 'fs';
@@ -139,6 +133,20 @@ async function seedDatabase() {
       // field is populated for the seed data.
       const seedSettings = initialSettings as Required<typeof initialSettings>;
       const settingsPayload: typeof settings.$inferInsert = {
+        whatsappNumber: seedSettings.whatsappNumber,
+        contactPhone: seedSettings.contactPhone,
+        contactEmail: seedSettings.contactEmail,
+        address: seedSettings.address,
+        addressAr: seedSettings.addressAr,
+        businessHours: seedSettings.businessHours,
+        businessHoursAr: seedSettings.businessHoursAr,
+        facebookUrl: seedSettings.facebookUrl,
+        instagramUrl: seedSettings.instagramUrl,
+        tiktokUrl: seedSettings.tiktokUrl,
+        youtubeUrl: seedSettings.youtubeUrl,
+        linkedinUrl: seedSettings.linkedinUrl,
+        logoText: seedSettings.logoText,
+        logoTextAr: seedSettings.logoTextAr,
         heroTitle: seedSettings.heroTitle,
         heroTitleAr: seedSettings.heroTitleAr,
         heroSubtitle: seedSettings.heroSubtitle,
@@ -158,7 +166,17 @@ async function seedDatabase() {
         seoTitle: seedSettings.seoTitle,
         seoDescription: seedSettings.seoDescription,
         seoKeywords: seedSettings.seoKeywords,
-        contactEmail: seedSettings.contactEmail,
+        ogTitle: seedSettings.ogTitle,
+        ogDescription: seedSettings.ogDescription,
+        robotsTxt: seedSettings.robotsTxt,
+        sitemapXml: seedSettings.sitemapXml,
+        redirectRules: seedSettings.redirectRules,
+        googleMapsUrl: seedSettings.googleMapsUrl,
+        footerText: seedSettings.footerText,
+        footerTextAr: seedSettings.footerTextAr,
+        quoteValidityDays: seedSettings.quoteValidityDays,
+        termsAndConditions: seedSettings.termsAndConditions,
+        termsAndConditionsAr: seedSettings.termsAndConditionsAr,
       };
       await db.insert(settings).values(settingsPayload);
     }
@@ -357,18 +375,19 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
   try {
-    console.log('REQ BODY:', req.body);
     const rows = await db.select().from(settings).limit(1);
+    // Never let the client overwrite the primary key or creation timestamp.
+    const { id, createdAt, ...safeBody } = req.body;
+
     if (rows.length === 0) {
-      const inserted = await db.insert(settings).values(req.body).returning();
+      const inserted = await db.insert(settings).values(safeBody).returning();
       return res.json(inserted[0]);
     } else {
-      const { id, createdAt, updatedAt, ...updateData } = req.body;
-
-      const updated = await db.update(settings)
-      .set(updateData)
-      .where(eq(settings.id, rows[0].id))
-      .returning();
+      const updated = await db
+        .update(settings)
+        .set(safeBody)
+        .where(eq(settings.id, rows[0].id))
+        .returning();
       res.json(updated[0]);
     }
   } catch (error) {
