@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppProvider, useApp } from './store/AppContext';
 import { Navigation } from './components/Navigation';
 import { Footer } from './components/Footer';
@@ -19,8 +19,40 @@ import {
   Award, Phone, Mail, MapPin, Clock, ArrowRight, Lock, Star, Sliders, CheckCircle2,
   Gem, PanelsTopLeft, Grid3x3, Sparkles, PenTool, Landmark, Briefcase, UtensilsCrossed, Wand2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useInView, animate } from 'motion/react';
+interface CounterProps {
+  value: number;
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
+}
 
+const AnimatedCounter = ({ value, decimals = 0, prefix = '', suffix = '' }: CounterProps) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true, margin: "-50px" });
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    if (isInView) {
+      const controls = animate(0, value, {
+        duration: 2,
+        ease: [0.16, 1, 0.3, 1],
+        onUpdate(latest) {
+          setDisplayValue(latest);
+        },
+      });
+      return () => controls.stop();
+    }
+  }, [isInView, value]);
+
+  return (
+    <span ref={ref}>
+      {prefix}
+      {displayValue.toFixed(decimals)}
+      {suffix}
+    </span>
+  );
+};
 const MainAppContent: React.FC = () => {
   const { 
     language, currentView, setCurrentView, 
@@ -202,21 +234,21 @@ const MainAppContent: React.FC = () => {
                 <div className="absolute bottom-0 left-0 right-0 border-t border-[#1A1A1A] bg-black/90 backdrop-blur-md py-8 hidden lg:block z-20">
                   <div className="mx-auto max-w-5xl px-8 flex justify-between items-center text-center text-xs font-mono tracking-widest uppercase gap-12">
                     <div className="flex-1">
-                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1">{settings.homeStat1Value || '150+'}</span>
+                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1"><AnimatedCounter value={150} suffix="+" /></span>
                       <span className="text-[10px] text-[#D6D3D1] tracking-[0.22em] font-medium block">
                         {isRtl ? (settings.homeStat1LabelAr || 'مشروع ديكوري منجز') : (settings.homeStat1Label || 'DECORATIVE PROJECTS DELIVERED')}
                       </span>
                     </div>
                     <div className="border-l border-[#1A1A1A] h-10" />
                     <div className="flex-1">
-                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1">{settings.homeStat2Value || '< 0.2mm'}</span>
+                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1"><AnimatedCounter value={0.2} decimals={1} prefix="< " suffix="mm" /></span>
                       <span className="text-[10px] text-[#D6D3D1] tracking-[0.22em] font-medium block">
                         {isRtl ? (settings.homeStat2LabelAr || 'نسبة انحراف ميكنة الـ CNC') : (settings.homeStat2Label || 'CNC TOLERANCE THRESHOLD')}
                       </span>
                     </div>
                     <div className="border-l border-[#1A1A1A] h-10" />
                     <div className="flex-1">
-                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1">{settings.homeStat3Value || '4'}</span>
+                      <span className="text-accent text-xl sm:text-2xl font-bold block mb-1"><AnimatedCounter value={4} /></span>
                       <span className="text-[10px] text-[#D6D3D1] tracking-[0.22em] font-medium block">
                         {isRtl ? (settings.homeStat3LabelAr || 'مواد أساسية: PMMA / PVC / MDF / معدن') : (settings.homeStat3Label || 'CORE MATERIALS: PMMA / PVC / MDF / METAL')}
                       </span>
@@ -229,19 +261,19 @@ const MainAppContent: React.FC = () => {
               <section className="mx-auto max-w-7xl px-4 lg:hidden">
                 <div className="grid grid-cols-3 gap-6 text-center bg-black text-white p-8 rounded-none border border-[#1A1A1A] font-mono uppercase tracking-wider text-[10px] divide-x divide-[#1A1A1A] rtl:divide-x-reverse">
                   <div className="px-2">
-                    <span className="text-accent text-xl font-bold block mb-1">{settings.homeStat1Value || '150+'}</span>
+                    <span className="text-accent text-xl font-bold block mb-1"><AnimatedCounter value={150} suffix="+" /></span>
                     <span className="text-[#D6D3D1] text-[9px] tracking-widest block">
                       {isRtl ? 'مشاريع' : 'Projects'}
                     </span>
                   </div>
                   <div className="px-2">
-                    <span className="text-accent text-xl font-bold block mb-1">{settings.homeStat2Value || '< 0.2mm'}</span>
+                    <span className="text-accent text-xl font-bold block mb-1"><AnimatedCounter value={0.2} decimals={1} prefix="< " suffix="mm" /></span>
                     <span className="text-[#D6D3D1] text-[9px] tracking-widest block">
                       {isRtl ? 'دقة CNC' : 'CNC Spec'}
                     </span>
                   </div>
                   <div className="px-2">
-                    <span className="text-accent text-xl font-bold block mb-1">{settings.homeStat3Value || '4'}</span>
+                    <span className="text-accent text-xl font-bold block mb-1"><AnimatedCounter value={4} /></span>
                     <span className="text-[#D6D3D1] text-[9px] tracking-widest block">
                       {isRtl ? 'مواد' : 'Materials'}
                     </span>
@@ -1167,61 +1199,49 @@ const MainAppContent: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      {/* Floating Action Buttons for quick communication */}
-      <div className={`fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-40 flex flex-col items-center gap-4 font-sans`}>
-        {/* Call button (secondary) — brass-outlined glass style, pairs with the filled WhatsApp button below instead of reading as a flat gray blob */}
-        <motion.a
-          href="tel:+213675858793"
-          initial={{ opacity: 0, y: 24, scale: 0.6 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 0.7, type: 'spring', stiffness: 260, damping: 18 }}
-          whileHover={{ scale: 1.1, rotate: isRtl ? 8 : -8 }}
-          whileTap={{ scale: 0.92 }}
-          className="group relative flex items-center justify-center w-12 h-12 rounded-full bg-black/90 backdrop-blur-md text-accent border-2 border-accent/70 shadow-[0_8px_24px_rgba(176,141,87,0.35)] hover:border-accent hover:bg-accent hover:text-black transition-colors duration-300"
-          title={isRtl ? 'اتصل بساجد شيباكي' : 'Call Sadjed Chebaki'}
-        >
-          <span className={`absolute ${isRtl ? 'left-full ml-3' : 'right-full mr-3'} top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 rounded-full bg-black/90 backdrop-blur-sm text-[10px] text-white font-mono uppercase tracking-widest border border-accent/20 opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-lg`}>
-            {isRtl ? 'اتصل بنا' : 'Call Us'}
-          </span>
-          <Phone className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-        </motion.a>
+      {/* floating Action System: Apple-style Compact Glass FAB */}
+<div className={`fixed bottom-5 ${isRtl ? 'left-5' : 'right-5'} z-50`}>
+  <motion.div
+    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+    animate={{ opacity: 1, y: 0, scale: 1 }}
+   transition={{ delay: 0.8, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+    className="flex items-center gap-2 p-1.5 bg-[#0A0A0A]/60 backdrop-blur-md rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)] border border-white/10 hover:border-accent/40 transition-colors duration-300"
+  >
+    {/* WhatsApp Button */}
+    <motion.a
+      href="https://wa.me/213675858793"
+      target="_blank"
+      rel="noreferrer"
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.92 }}
+      className="relative flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-accent to-accent-dark text-black shadow-md"
+      title={isRtl ? 'واتساب' : 'WhatsApp'}
+    >
+      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.965C16.528 1.975 14.069.953 11.5.953c-5.438 0-9.863 4.371-9.867 9.8.001 2.03.543 4.004 1.571 5.75l-.943 3.442 3.53-.916c1.652.88 3.328 1.34 4.866 1.34zm8.356-6.425c-.244-.12-1.441-.702-1.664-.781-.223-.08-.386-.12-.549.12-.162.24-.629.781-.771.94-.143.162-.285.18-.53.06-.243-.12-1.028-.375-1.957-1.192-.723-.637-1.21-1.425-1.352-1.664-.142-.24-.015-.369.106-.489.11-.108.244-.28.366-.42.12-.14.162-.24.244-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.302-.752-1.787-.197-.474-.397-.41-.549-.418-.142-.007-.305-.007-.468-.007-.163 0-.427.06-.65.3-.224.24-.854.82-.854 2.01 0 1.19.874 2.339.995 2.5.12.162 1.72 2.585 4.167 3.62.582.247 1.036.395 1.39.505.585.183 1.118.157 1.539.095.47-.07 1.441-.58 1.644-1.14.204-.56.204-1.04.142-1.14-.061-.1-.223-.16-.467-.28z"/>
+      </svg>
+      {/* Small notification indicator */}
+      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+      </span>
+    </motion.a>
 
-        {/* WhatsApp button (primary) — pulsing ring + live status dot */}
-        <motion.a
-          href="https://wa.me/213675858793"
-          target="_blank"
-          rel="noreferrer"
-          initial={{ opacity: 0, y: 24, scale: 0.6 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 0.9, type: 'spring', stiffness: 260, damping: 18 }}
-          whileHover={{ scale: 1.1, rotate: isRtl ? -8 : 8 }}
-          whileTap={{ scale: 0.92 }}
-          className="group relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-accent to-accent-dark text-black shadow-[0_8px_28px_rgba(176,141,87,0.5)]"
-          title={isRtl ? 'راسلنا على واتساب' : 'WhatsApp Contact'}
-        >
-          <span className="absolute inset-0 rounded-full bg-accent fab-pulse-ring" />
-          <span className="absolute inset-0 rounded-full bg-accent fab-pulse-ring" style={{ animationDelay: '1.2s' }} />
+    {/* Small Separator Line */}
+    <div className="w-[1px] h-4 bg-white/10" />
 
-          <span className={`absolute ${isRtl ? 'left-full ml-3' : 'right-full mr-3'} top-1/2 -translate-y-1/2 flex items-center px-3 py-1.5 rounded-full bg-black/90 backdrop-blur-sm text-[10px] text-white font-mono uppercase tracking-widest border border-accent/20 opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-lg`}>
-            {isRtl ? 'محادثة واتساب سريعة' : 'WhatsApp Chat'}
-          </span>
-
-          <motion.svg
-            className="relative w-6 h-6 fill-current z-10"
-            viewBox="0 0 24 24"
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.965C16.528 1.975 14.069.953 11.5.953c-5.438 0-9.863 4.371-9.867 9.8.001 2.03.543 4.004 1.571 5.75l-.943 3.442 3.53-.916c1.652.88 3.328 1.34 4.866 1.34zm8.356-6.425c-.244-.12-1.441-.702-1.664-.781-.223-.08-.386-.12-.549.12-.162.24-.629.781-.771.94-.143.162-.285.18-.53.06-.243-.12-1.028-.375-1.957-1.192-.723-.637-1.21-1.425-1.352-1.664-.142-.24-.015-.369.106-.489.11-.108.244-.28.366-.42.12-.14.162-.24.244-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.302-.752-1.787-.197-.474-.397-.41-.549-.418-.142-.007-.305-.007-.468-.007-.163 0-.427.06-.65.3-.224.24-.854.82-.854 2.01 0 1.19.874 2.339.995 2.5.12.162 1.72 2.585 4.167 3.62.582.247 1.036.395 1.39.505.585.183 1.118.157 1.539.095.47-.07 1.441-.58 1.644-1.14.204-.56.204-1.04.142-1.14-.061-.1-.223-.16-.467-.28z"/>
-          </motion.svg>
-
-          {/* Live status dot */}
-          <span className="absolute -top-0.5 -right-0.5 z-20 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-green-400 border-2 border-black" />
-          </span>
-        </motion.a>
-      </div>
+    {/* Phone Call Button */}
+    <motion.a
+      href="tel:+213675858793"
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.92 }}
+      className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 text-accent hover:bg-accent/20 transition-colors"
+      title={isRtl ? 'اتصال هاتفي' : 'Phone Call'}
+    >
+      <Phone className="w-4 h-4" />
+    </motion.a>
+  </motion.div>
+</div>
 
       {/* 3. Global Footer */}
       <Footer />
