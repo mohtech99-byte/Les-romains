@@ -27,7 +27,9 @@ import {
   pricingFactors,
   workshopPricing,
   estimations,
-  activityLogs
+  activityLogs,
+  customerQuotations,
+  customerQuotationItems
 } from './src/db/schema.ts';
 import { requireAuth, requireRole, AuthRequest } from './src/middleware/auth.ts';
 import {
@@ -861,6 +863,246 @@ app.get('/api/activity-logs', requireAuth, requireRole(['admin']), async (req, r
   }
 });
 
+// ---------------------------------------------------------------------------
+// Customer Quotation Management — self-contained feature. Admin creates
+// quotations manually for walk-in / phone / WhatsApp customers. Entirely
+// separate from the public quote-request pipeline (`quotes`) and the
+// internal Workshop Estimator (`estimations`); nothing here touches those.
+// ---------------------------------------------------------------------------
+
+function parseItemRow(row: typeof customerQuotationItems.$inferSelect) {
+  return {
+    id: row.id,
+    description: row.description,
+    quantity: parseFloat(row.quantity),
+    unitPrice: parseFloat(row.unitPrice),
+    total: parseFloat(row.total),
+  };
+}
+
+function parseQuotationRow(row: typeof customerQuotations.$inferSelect, items: ReturnType<typeof parseItemRow>[]) {
+  return {
+    id: row.id,
+    quotationNumber: row.quotationNumber,
+    customerName: row.customerName,
+    customerPhone: row.customerPhone,
+    customerEmail: row.customerEmail || '',
+    customerAddress: row.customerAddress || '',
+    issueDate: row.issueDate,
+    validUntil: row.validUntil,
+    subtotal: parseFloat(row.subtotal),
+    discount: parseFloat(row.discount),
+    total: parseFloat(row.total),
+    notes: row.notes || '',
+    status: row.status,
+    items,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function generateQuotationNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const all = await db.select({ quotationNumber: customerQuotations.quotationNumber }).from(customerQuotations);
+  const countThisYear = all.filter(q => q.quotationNumber.startsWith(`LR-${year}-`)).length;
+  return `LR-${year}-${String(countThisYear + 1).padStart(6, '0')}`;
+}
+
+// List — all quotations with their items. Search/filter/pagination are
+// handled client-side (consistent with how Quotes and Estimations already
+// work elsewhere in this dashboard), so this simply returns everything.
+app.get('/api/customer-quotations', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const quotationRows = await db.select().from(customerQuotations).orderBy(desc(customerQuotations.createdAt));
+    const itemRows = await db.select().from(customerQuotationItems);
+    const itemsByQuotation = new Map<number, ReturnType<typeof parseItemRow>[]>();
+    for (const item of itemRows) {
+      const parsed = parseItemRow(item);
+      const list = itemsByQuotation.get(item.quotationId) || [];
+      list.push(parsed);
+      itemsByQuotation.set(item.quotationId, list);
+    }
+    const result = quotationRows.map(row => parseQuotationRow(row, itemsByQuotation.get(row.id) || []));
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching customer quotations:', error);
+    res.status(500).json({ error: 'Database query failed' });
+  }
+});
+
+app.get('/api/customer-quotations/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const quotationId = parseInt(req.params.id, 10);
+    const rows = await db.select().from(customerQuotations).where(eq(customerQuotations.id, quotationId)).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: 'Quotation not found' });
+    const itemRows = await db.select().from(customerQuotationItems).where(eq(customerQuotationItems.quotationId, quotationId));
+    res.json(parseQuotationRow(rows[0], itemRows.map(parseItemRow)));
+  } catch (error) {
+    console.error('Error fetching customer quotation:', error);
+    res.status(500).json({ error: 'Database query failed' });
+  }
+});
+
+app.post('/api/customer-quotations', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const { customerName, customerPhone, customerEmail, customerAddress, issueDate, validUntil, subtotal, discount, total, notes, status, items } = req.body;
+
+    if (!customerName || !customerPhone) {
+      return res.status(400).json({ error: 'Customer name and phone are required' });
+    }
+
+    const quotationNumber = await generateQuotationNumber();
+
+    const inserted = await db.insert(customerQuotations).values({
+      quotationNumber,
+      customerName,
+      customerPhone,
+      customerEmail: customerEmail || null,
+      customerAddress: customerAddress || null,
+      issueDate: issueDate || new Date().toISOString().slice(0, 10),
+      validUntil: validUntil || new Date().toISOString().slice(0, 10),
+      subtotal: String(subtotal ?? 0),
+      discount: String(discount ?? 0),
+      total: String(total ?? 0),
+      notes: notes || null,
+      status: status || 'draft',
+    }).returning();
+
+    const quotation = inserted[0];
+
+    const itemsToInsert = Array.isArray(items) ? items : [];
+    let insertedItems: typeof customerQuotationItems.$inferSelect[] = [];
+    if (itemsToInsert.length > 0) {
+      insertedItems = await db.insert(customerQuotationItems).values(
+        itemsToInsert.map((it: any) => ({
+          quotationId: quotation.id,
+          description: it.description || '',
+          quantity: String(it.quantity ?? 1),
+          unitPrice: String(it.unitPrice ?? 0),
+          total: String((it.quantity ?? 1) * (it.unitPrice ?? 0)),
+        }))
+      ).returning();
+    }
+
+    res.json(parseQuotationRow(quotation, insertedItems.map(parseItemRow)));
+  } catch (error) {
+    console.error('Error creating customer quotation:', error);
+    res.status(500).json({ error: 'Failed to create customer quotation' });
+  }
+});
+
+app.put('/api/customer-quotations/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const quotationId = parseInt(req.params.id, 10);
+    const existing = await db.select().from(customerQuotations).where(eq(customerQuotations.id, quotationId)).limit(1);
+    if (existing.length === 0) return res.status(404).json({ error: 'Quotation not found' });
+
+    const { customerName, customerPhone, customerEmail, customerAddress, issueDate, validUntil, subtotal, discount, total, notes, status, items } = req.body;
+
+    const updated = await db.update(customerQuotations)
+      .set({
+        customerName,
+        customerPhone,
+        customerEmail: customerEmail || null,
+        customerAddress: customerAddress || null,
+        issueDate,
+        validUntil,
+        subtotal: String(subtotal ?? 0),
+        discount: String(discount ?? 0),
+        total: String(total ?? 0),
+        notes: notes || null,
+        status,
+        updatedAt: new Date(),
+      })
+      .where(eq(customerQuotations.id, quotationId))
+      .returning();
+
+    // Replace items wholesale — simplest correct behavior for a form-driven edit.
+    let finalItems: typeof customerQuotationItems.$inferSelect[] = [];
+    if (Array.isArray(items)) {
+      await db.delete(customerQuotationItems).where(eq(customerQuotationItems.quotationId, quotationId));
+      if (items.length > 0) {
+        finalItems = await db.insert(customerQuotationItems).values(
+          items.map((it: any) => ({
+            quotationId,
+            description: it.description || '',
+            quantity: String(it.quantity ?? 1),
+            unitPrice: String(it.unitPrice ?? 0),
+            total: String((it.quantity ?? 1) * (it.unitPrice ?? 0)),
+          }))
+        ).returning();
+      }
+    } else {
+      const existingItems = await db.select().from(customerQuotationItems).where(eq(customerQuotationItems.quotationId, quotationId));
+      finalItems = existingItems;
+    }
+
+    res.json(parseQuotationRow(updated[0], finalItems.map(parseItemRow)));
+  } catch (error) {
+    console.error('Error updating customer quotation:', error);
+    res.status(500).json({ error: 'Failed to update customer quotation' });
+  }
+});
+
+app.delete('/api/customer-quotations/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const quotationId = parseInt(req.params.id, 10);
+    // customer_quotation_items has ON DELETE CASCADE, so items are removed automatically.
+    await db.delete(customerQuotations).where(eq(customerQuotations.id, quotationId));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting customer quotation:', error);
+    res.status(500).json({ error: 'Failed to delete customer quotation' });
+  }
+});
+
+app.post('/api/customer-quotations/:id/duplicate', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const quotationId = parseInt(req.params.id, 10);
+    const rows = await db.select().from(customerQuotations).where(eq(customerQuotations.id, quotationId)).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: 'Quotation not found' });
+    const original = rows[0];
+    const originalItems = await db.select().from(customerQuotationItems).where(eq(customerQuotationItems.quotationId, quotationId));
+
+    const quotationNumber = await generateQuotationNumber();
+    const today = new Date().toISOString().slice(0, 10);
+
+    const inserted = await db.insert(customerQuotations).values({
+      quotationNumber,
+      customerName: original.customerName,
+      customerPhone: original.customerPhone,
+      customerEmail: original.customerEmail,
+      customerAddress: original.customerAddress,
+      issueDate: today,
+      validUntil: original.validUntil,
+      subtotal: original.subtotal,
+      discount: original.discount,
+      total: original.total,
+      notes: original.notes,
+      status: 'draft',
+    }).returning();
+
+    const newQuotation = inserted[0];
+    let newItems: typeof customerQuotationItems.$inferSelect[] = [];
+    if (originalItems.length > 0) {
+      newItems = await db.insert(customerQuotationItems).values(
+        originalItems.map(it => ({
+          quotationId: newQuotation.id,
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.total,
+        }))
+      ).returning();
+    }
+
+    res.json(parseQuotationRow(newQuotation, newItems.map(parseItemRow)));
+  } catch (error) {
+    console.error('Error duplicating customer quotation:', error);
+    res.status(500).json({ error: 'Failed to duplicate customer quotation' });
+  }
+});
+
 // Projects CRUD
 app.get('/api/projects', async (req, res) => {
   try {
@@ -1356,7 +1598,8 @@ app.post('/api/media/upload', requireAuth, requireRole(['admin', 'manager', 'edi
     res.json(inserted[0]);
   } catch (error) {
     console.error('File upload route error:', error);
-    res.status(500).json({ error: 'File upload failed' });
+    const detail = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: `File upload failed: ${detail}` });
   }
 });
 

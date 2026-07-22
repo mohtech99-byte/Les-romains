@@ -283,3 +283,42 @@ export interface ActivityLog {
   userAgent?: string;
   date: string;
 }
+
+// -----------------------------------------------------------------------------
+// Customer Quotation Management — admin-authored quotations for walk-in /
+// phone / WhatsApp customers. Entirely separate from the public quote-request
+// pipeline (QuoteRequest) and the internal Workshop Estimator (WorkshopEstimation).
+// -----------------------------------------------------------------------------
+export type CustomerQuotationStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'expired';
+
+export interface CustomerQuotationItem {
+  id?: number;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface CustomerQuotation {
+  id: number;
+  quotationNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerAddress: string;
+  issueDate: string;
+  validUntil: string;
+  subtotal: number;
+  discount: number;
+  total: number;
+  notes: string;
+  status: CustomerQuotationStatus;
+  items: CustomerQuotationItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Payload shape for create/update — server generates id/quotationNumber/
+// createdAt/updatedAt, and computes totals are trusted from the client but
+// re-derivable for validation.
+export type CustomerQuotationInput = Omit<CustomerQuotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>;

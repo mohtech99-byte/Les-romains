@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase.ts';
-import { Service, PortfolioProject, CNCProduct, Testimonial, BlogPost, QuoteRequest, AppSettings, PricingFactor, WorkshopPricingItem, WorkshopEstimation, WorkshopOptionItem, ActivityLog, TrackedQuote } from '../types';
+import { Service, PortfolioProject, CNCProduct, Testimonial, BlogPost, QuoteRequest, AppSettings, PricingFactor, WorkshopPricingItem, WorkshopEstimation, WorkshopOptionItem, ActivityLog, TrackedQuote, CustomerQuotation, CustomerQuotationInput } from '../types';
 import {
   initialServices,
   initialProjects,
@@ -62,6 +62,7 @@ interface AppContextType {
   workshopOptions: WorkshopOptionItem[];
   estimations: WorkshopEstimation[];
   activityLogs: ActivityLog[];
+  customerQuotations: CustomerQuotation[];
   
   // Refetches
   refetchAllPublicData: () => Promise<void>;
@@ -105,6 +106,10 @@ interface AppContextType {
   saveEstimation: (est: Omit<WorkshopEstimation, 'id' | 'date'>) => Promise<any>;
   updateEstimationStatus: (id: string, status: WorkshopEstimation['status']) => Promise<any>;
   deleteEstimation: (id: string) => Promise<any>;
+  createCustomerQuotation: (data: CustomerQuotationInput) => Promise<CustomerQuotation>;
+  updateCustomerQuotation: (id: number, data: CustomerQuotationInput) => Promise<CustomerQuotation>;
+  deleteCustomerQuotation: (id: number) => Promise<any>;
+  duplicateCustomerQuotation: (id: number) => Promise<CustomerQuotation>;
   
   resetToDefault: () => void;
 }
@@ -148,6 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [workshopOptions, setWorkshopOptions] = useState<WorkshopOptionItem[]>([]);
   const [estimations, setEstimations] = useState<WorkshopEstimation[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [customerQuotations, setCustomerQuotations] = useState<CustomerQuotation[]>([]);
 
   // -----------------------------------------------------------------------------
   // Dynamic Token & Request Helper
@@ -206,13 +212,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refetchAllAdminData = async () => {
     if (!user) return;
     try {
-      const [quotesRes, msgRes, mediaRes, workshopPricingRes, estimationsRes, activityLogsRes] = await Promise.all([
+      const [quotesRes, msgRes, mediaRes, workshopPricingRes, estimationsRes, activityLogsRes, customerQuotationsRes] = await Promise.all([
         fetchWithAuth('/api/quotes'),
         fetchWithAuth('/api/messages'),
         fetchWithAuth('/api/media'),
         fetchWithAuth('/api/workshop-pricing'),
         fetchWithAuth('/api/estimations'),
         fetchWithAuth('/api/activity-logs'),
+        fetchWithAuth('/api/customer-quotations'),
       ]);
 
       if (quotesRes.ok) setQuotes(await quotesRes.json());
@@ -221,6 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (workshopPricingRes.ok) setWorkshopPricing(await workshopPricingRes.json());
       if (estimationsRes.ok) setEstimations(await estimationsRes.json());
       if (activityLogsRes.ok) setActivityLogs(await activityLogsRes.json());
+      if (customerQuotationsRes.ok) setCustomerQuotations(await customerQuotationsRes.json());
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
     }
@@ -553,6 +561,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createCustomerQuotation = async (data: CustomerQuotationInput): Promise<CustomerQuotation> => {
+    try {
+      const res = await fetchWithAuth('/api/customer-quotations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to create customer quotation');
+      const saved = await res.json();
+      setCustomerQuotations(prev => [saved, ...prev]);
+      return saved;
+    } catch (error) {
+      console.error('Error creating customer quotation:', error);
+      throw error;
+    }
+  };
+
+  const updateCustomerQuotation = async (id: number, data: CustomerQuotationInput): Promise<CustomerQuotation> => {
+    try {
+      const res = await fetchWithAuth(`/api/customer-quotations/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to update customer quotation');
+      const saved = await res.json();
+      setCustomerQuotations(prev => prev.map(q => (q.id === id ? saved : q)));
+      return saved;
+    } catch (error) {
+      console.error('Error updating customer quotation:', error);
+      throw error;
+    }
+  };
+
+  const deleteCustomerQuotation = async (id: number) => {
+    try {
+      const res = await fetchWithAuth(`/api/customer-quotations/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete customer quotation');
+      setCustomerQuotations(prev => prev.filter(q => q.id !== id));
+    } catch (error) {
+      console.error('Error deleting customer quotation:', error);
+      throw error;
+    }
+  };
+
+  const duplicateCustomerQuotation = async (id: number): Promise<CustomerQuotation> => {
+    try {
+      const res = await fetchWithAuth(`/api/customer-quotations/${id}/duplicate`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Failed to duplicate customer quotation');
+      const saved = await res.json();
+      setCustomerQuotations(prev => [saved, ...prev]);
+      return saved;
+    } catch (error) {
+      console.error('Error duplicating customer quotation:', error);
+      throw error;
+    }
+  };
+
   const saveProject = async (project: PortfolioProject) => {
     try {
       const res = await fetchWithAuth('/api/projects', {
@@ -746,7 +814,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: formData,
       });
 
-      if (!res.ok) throw new Error('File upload failed');
+      if (!res.ok) {
+        let message = 'File upload failed';
+        try {
+          const body = await res.json();
+          if (body?.error) message = body.error;
+        } catch { /* response wasn't JSON, keep generic message */ }
+        throw new Error(message);
+      }
       const uploadedFile = await res.json();
       setMediaFiles(prev => [uploadedFile, ...prev]);
       return uploadedFile;
@@ -791,6 +866,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workshopOptions,
       estimations,
       activityLogs,
+      customerQuotations,
       
       refetchAllPublicData,
       refetchAllAdminData,
@@ -830,6 +906,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveEstimation,
       updateEstimationStatus,
       deleteEstimation,
+      createCustomerQuotation,
+      updateCustomerQuotation,
+      deleteCustomerQuotation,
+      duplicateCustomerQuotation,
       
       resetToDefault
     }}>

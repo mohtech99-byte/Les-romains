@@ -255,3 +255,47 @@ export const activityLogs = pgTable('activity_logs', {
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// -----------------------------------------------------------------------------
+// 14. Customer Quotation Management — a self-contained feature for quotations
+// the admin creates manually (walk-in / phone / WhatsApp customers). This is
+// entirely separate from the public quote-request pipeline (`quotes` table)
+// and the internal Workshop Estimator (`estimations` table).
+// -----------------------------------------------------------------------------
+export const customerQuotations = pgTable('customer_quotations', {
+  id: serial('id').primaryKey(),
+  quotationNumber: text('quotation_number').notNull().unique(), // e.g. 'LR-2026-000001'
+  customerName: text('customer_name').notNull(),
+  customerPhone: text('customer_phone').notNull(),
+  customerEmail: text('customer_email'),
+  customerAddress: text('customer_address'),
+  issueDate: text('issue_date').notNull(), // ISO date string, admin-editable
+  validUntil: text('valid_until').notNull(), // ISO date string, admin-editable
+  subtotal: text('subtotal').notNull().default('0'),
+  discount: text('discount').notNull().default('0'),
+  total: text('total').notNull().default('0'),
+  notes: text('notes'),
+  status: text('status', { enum: ['draft', 'sent', 'approved', 'rejected', 'expired'] }).default('draft').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const customerQuotationItems = pgTable('customer_quotation_items', {
+  id: serial('id').primaryKey(),
+  quotationId: integer('quotation_id').notNull().references(() => customerQuotations.id, { onDelete: 'cascade' }),
+  description: text('description').notNull(),
+  quantity: text('quantity').notNull().default('1'),
+  unitPrice: text('unit_price').notNull().default('0'),
+  total: text('total').notNull().default('0'),
+});
+
+export const customerQuotationsRelations = relations(customerQuotations, ({ many }) => ({
+  items: many(customerQuotationItems),
+}));
+
+export const customerQuotationItemsRelations = relations(customerQuotationItems, ({ one }) => ({
+  quotation: one(customerQuotations, {
+    fields: [customerQuotationItems.quotationId],
+    references: [customerQuotations.id],
+  }),
+}));

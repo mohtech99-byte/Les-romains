@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 import { WorkshopEstimator } from './workshop/WorkshopEstimator.tsx';
+import { CustomerQuotationsPanel } from './customer-quotations/CustomerQuotationsPanel.tsx';
 
 const ORDER_STAGES: { key: string; label: string; labelAr: string }[] = [
   { key: 'created', label: 'Created', labelAr: 'تم الإنشاء' },
@@ -65,7 +66,7 @@ export const Dashboard: React.FC = () => {
   const isRtl = language === 'ar';
   
   // 9 Unified Workspace Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'content' | 'portfolio' | 'products' | 'pricing' | 'workshop' | 'workshop-pricing' | 'quotes' | 'system'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'content' | 'portfolio' | 'products' | 'pricing' | 'workshop' | 'workshop-pricing' | 'customer-quotations' | 'quotes' | 'system'>('overview');
 
   // Pricing & Materials tab local state (public Quote Estimator — unchanged)
   const [activePricingSub, setActivePricingSub] = useState<'material' | 'projectType' | 'complexity' | 'wilaya'>('material');
@@ -157,9 +158,11 @@ export const Dashboard: React.FC = () => {
           setProductForm(prev => ({ ...prev, images: [...prev.images, uploaded.url] }));
         }
       } catch (err) {
-        alert(isRtl ? 'خطأ أثناء رفع الملف' : 'Error uploading file');
+        const message = err instanceof Error ? err.message : '';
+        alert((isRtl ? 'خطأ أثناء رفع الملف: ' : 'Error uploading file: ') + (message || (isRtl ? 'سبب غير معروف' : 'unknown reason')));
       } finally {
         setIsUploadingFile(false);
+        e.target.value = '';
       }
     }
   };
@@ -326,6 +329,7 @@ export const Dashboard: React.FC = () => {
           { id: 'pricing', label: 'Pricing & Materials', labelAr: 'الأسعار والمواد', icon: Calculator },
           { id: 'workshop', label: 'Workshop Estimator', labelAr: 'حاسبة الورشة', icon: Wrench },
           { id: 'workshop-pricing', label: 'Workshop Pricing', labelAr: 'أسعار الورشة', icon: Settings },
+          { id: 'customer-quotations', label: 'Customer Quotations', labelAr: 'عروض أسعار الزبائن', icon: FileText },
           { id: 'quotes', label: 'CRM & Inbox Enquiries', labelAr: 'صندوق طلبات التسعير', icon: Mail, badge: quotes.filter(q => q.status === 'created').length },
           { id: 'system', label: 'System, Media & Security', labelAr: 'أمان، وسائط والملفات', icon: Shield }
         ].map(tab => (
@@ -358,6 +362,15 @@ export const Dashboard: React.FC = () => {
 
       {/* Main Active Panel Area */}
       <div className="flex-1 bg-white dark:bg-gray-900/40 rounded-none border border-gray-150 dark:border-gray-900 p-6 sm:p-8 shadow-xl min-h-[70vh]">
+        {/* Hidden file input for image uploads */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept="image/*"
+          className="hidden"
+        />
+
         
         {/* TAB 1: CONSOLE OVERVIEW & LIVE ANALYTICS */}
         {activeTab === 'overview' && (
@@ -546,9 +559,11 @@ export const Dashboard: React.FC = () => {
                                   setSettingsForm(prev => ({ ...prev, heroBgImage: uploaded.url }));
                                   alert(isRtl ? 'تم رفع الصورة!' : 'Image uploaded successfully!');
                                 } catch (e) {
-                                  alert('Upload failed');
+                                  const message = e instanceof Error ? e.message : '';
+                                  alert('Upload failed' + (message ? `: ${message}` : ''));
                                 } finally {
                                   setIsUploadingFile(false);
+                                  input.value = '';
                                 }
                               }
                             };
@@ -1467,6 +1482,9 @@ export const Dashboard: React.FC = () => {
             </form>
           </div>
         )}
+
+        {/* TAB: CUSTOMER QUOTATIONS (Customer Quotation Management — self-contained) */}
+        {activeTab === 'customer-quotations' && <CustomerQuotationsPanel />}
 
         {/* TAB 5: CRM & QUOTATIONS QUEUE */}
         {activeTab === 'quotes' && (
