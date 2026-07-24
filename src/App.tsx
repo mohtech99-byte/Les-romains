@@ -839,7 +839,7 @@ const MainAppContent: React.FC = () => {
                       {isRtl ? 'المشغل الرئيسي والمقر' : 'Headquarters & Primary Contact'}
                     </h3>
                     <p className="text-xs text-gray-400 font-mono tracking-wide uppercase">
-                      {isRtl ? 'تحت إدارة ساجد شيباكي' : 'Managed by Sadjed Chebaki'}
+                      {isRtl ? 'تحت إدارة ساجد شباكي' : 'Managed by Sadjed Chebaki'}
                     </p>
                   </div>
 
@@ -864,7 +864,7 @@ const MainAppContent: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <span className="font-semibold text-gray-950 dark:text-white block uppercase font-mono text-[10px] tracking-widest mb-1">
-                          {isRtl ? 'جهة الاتصال الرئيسية (ساجد شيباكي)' : 'PRIMARY CONTACT (SADJED CHEBAKI)'}
+                          {isRtl ? 'جهة الاتصال الرئيسية (ساجد شباكي)' : 'PRIMARY CONTACT (SADJED CHEBAKI)'}
                         </span>
                         <div className="flex flex-col gap-1 font-mono text-sm font-semibold text-gray-900 dark:text-white">
                           <a href="tel:+213675858793" className="hover:text-accent transition-colors">+213 (0) 675 858 793</a>
@@ -879,7 +879,7 @@ const MainAppContent: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <span className="font-semibold text-gray-950 dark:text-white block uppercase font-mono text-[10px] tracking-widest mb-1">
-                          {isRtl ? 'جهة الاتصال الثانوية (عبد النور)' : 'SECONDARY CONTACT (ABDENOUR)'}
+                          {isRtl ? 'جهة الاتصال الثانوية (عبد النور كموني)' : 'SECONDARY CONTACT (ABDENOUR KEMOUNI)'}
                         </span>
                         <a href="tel:+213656229615" className="hover:text-accent transition-colors font-mono text-sm font-semibold text-gray-900 dark:text-white block">
                           +213 (0) 656 229 615
@@ -1152,8 +1152,8 @@ const MainAppContent: React.FC = () => {
                     </p>
                     <p className="text-xs text-gray-400">
                       {isRtl 
-                        ? 'يرجى مراجعة المالك ساجد شيباكي لتفعيل حسابك.' 
-                        : 'Please contact Sadjed Chebaki or Abdenour to request access permissions.'}
+                        ? 'يرجى مراجعة المالك ساجد شباكي لتفعيل حسابك.' 
+                        : 'Please contact Sadjed Chebaki or Abdenour Kemouni to request access permissions.'}
                     </p>
                   </div>
 

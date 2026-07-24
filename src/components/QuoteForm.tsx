@@ -346,8 +346,8 @@ export const QuoteForm: React.FC = () => {
                 </p>
                 <p className="text-xs text-gray-700 dark:text-gray-400">
                   {isRtl 
-                    ? 'تواصل مباشرة مع المالك ساجد شيباكي أو عبد النور عبر الهاتف أو الواتساب:' 
-                    : 'Get in touch directly with Sadjed Chebaki (Owner) or Abdenour via call/WhatsApp:'}
+                    ? 'تواصل مباشرة مع المالك ساجد شباكي أو عبد النور كموني عبر الهاتف أو الواتساب:' 
+                    : 'Get in touch directly with Sadjed Chebaki (Owner) or Abdenour Kemouni via call/WhatsApp:'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-[10px] font-mono">
@@ -361,7 +361,7 @@ export const QuoteForm: React.FC = () => {
                   href="tel:+213656229615" 
                   className="px-3 py-1.5 rounded-none border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:border-accent hover:text-accent transition-colors"
                 >
-                  {isRtl ? 'اتصل بعبد النور' : 'Call Abdenour'}
+                  {isRtl ? 'اتصل ب كمونيعبد النور' : 'Call Abdenour Kemouni'}
                 </a>
                 <a 
                   href="https://wa.me/213675858793" 

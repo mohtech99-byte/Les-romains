@@ -37,6 +37,7 @@ export const Dashboard: React.FC = () => {
     pricingFactors,
     workshopPricing,
     activityLogs,
+    newsletterSubscribers,
     
     saveSettings,
     saveService,
@@ -58,6 +59,12 @@ export const Dashboard: React.FC = () => {
     deletePricingFactor,
     saveWorkshopPricing,
     deleteWorkshopPricing,
+    subscribeNewsletter,
+    deleteNewsletterSubscriber,
+    toggleNewsletterSubscriber,
+    notifyBlogPostSubscribers,
+    sendQuoteTrackingUpdate,
+    emailQuotationPdf,
     refetchAllAdminData,
     userRole,
     user
@@ -66,7 +73,7 @@ export const Dashboard: React.FC = () => {
   const isRtl = language === 'ar';
   
   // 9 Unified Workspace Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'content' | 'portfolio' | 'products' | 'pricing' | 'workshop' | 'workshop-pricing' | 'customer-quotations' | 'quotes' | 'system'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'content' | 'portfolio' | 'products' | 'pricing' | 'workshop' | 'workshop-pricing' | 'customer-quotations' | 'quotes' | 'newsletter' | 'system'>('overview');
 
   // Pricing & Materials tab local state (public Quote Estimator — unchanged)
   const [activePricingSub, setActivePricingSub] = useState<'material' | 'projectType' | 'complexity' | 'wilaya'>('material');
@@ -79,7 +86,7 @@ export const Dashboard: React.FC = () => {
   // Local Audit Logs (simulated from session activities to avoid excessive writes, but connected to active user details)
   const [auditLogs, setAuditLogs] = useState<Array<{ id: string; time: string; user: string; action: string; actionAr: string }>>([
     { id: '1', time: '17:05:12', user: 'Sadjed (Admin)', action: 'Logged into Administration Console', actionAr: 'تم تسجيل الدخول إلى لوحة التحكم' },
-    { id: '2', time: '16:42:01', user: 'Abdenour (Manager)', action: 'Reviewed Quotation Request', actionAr: 'تمت مراجعة طلب تسعيرة' }
+    { id: '2', time: '16:42:01', user: 'Abdenour Kemouni (Manager)', action: 'Reviewed Quotation Request', actionAr: 'تمت مراجعة طلب تسعيرة' }
   ]);
 
   const addAuditLog = (action: string, actionAr: string) => {
@@ -123,7 +130,7 @@ export const Dashboard: React.FC = () => {
   const [activeContentSub, setActiveContentSub] = useState<'homepage' | 'services' | 'blog' | 'testimonials' | 'quotation'>('homepage');
   const [blogForm, setBlogForm] = useState<Omit<BlogPost, 'id'>>({
     title: '', titleAr: '', excerpt: '', excerptAr: '', content: '', contentAr: '',
-    category: 'CNC Tips', categoryAr: 'إرشادات', author: 'Sadjed Chebaki', authorAr: 'ساجد شيباكي',
+    category: 'CNC Tips', categoryAr: 'إرشادات', author: 'Sadjed Chebaki', authorAr: 'ساجد شباكي',
     date: new Date().toISOString().split('T')[0], readTime: '5 min read', readTimeAr: '٥ دقائق',
     image: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?q=80&w=800', tags: ['CNC']
   });
@@ -132,13 +139,24 @@ export const Dashboard: React.FC = () => {
     content: '', contentAr: '', rating: 5, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400', isFeatured: true
   });
 
+  // Newsletter state
+  const [subscriberSearch, setSubscriberSearch] = useState('');
+
   // Quotes Interaction State
   const [activeQuoteId, setActiveQuoteId] = useState<string | null>(null);
+  const [notifyingPostId, setNotifyingPostId] = useState<string | null>(null);
+  const [sendingTrackingEmail, setSendingTrackingEmail] = useState(false);
+  const [emailingPdfId, setEmailingPdfId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplySent, setIsReplySent] = useState(false);
   const [quoteLineItems, setQuoteLineItems] = useState<{ description: string; quantity: number; unitPrice: number }[]>([]);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [advancingStage, setAdvancingStage] = useState(false);
+
+  const filteredSubscribers = newsletterSubscribers.filter(s => {
+    const q = subscriberSearch.toLowerCase();
+    return s.email.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q);
+  });
 
   // File uploading trigger
   const handleFileUploadTrigger = () => {
@@ -162,7 +180,6 @@ export const Dashboard: React.FC = () => {
         alert((isRtl ? 'خطأ أثناء رفع الملف: ' : 'Error uploading file: ') + (message || (isRtl ? 'سبب غير معروف' : 'unknown reason')));
       } finally {
         setIsUploadingFile(false);
-        e.target.value = '';
       }
     }
   };
@@ -331,6 +348,7 @@ export const Dashboard: React.FC = () => {
           { id: 'workshop-pricing', label: 'Workshop Pricing', labelAr: 'أسعار الورشة', icon: Settings },
           { id: 'customer-quotations', label: 'Customer Quotations', labelAr: 'عروض أسعار الزبائن', icon: FileText },
           { id: 'quotes', label: 'CRM & Inbox Enquiries', labelAr: 'صندوق طلبات التسعير', icon: Mail, badge: quotes.filter(q => q.status === 'created').length },
+          { id: 'newsletter', label: 'Newsletter', labelAr: 'النشرة البريدية', icon: Mail, badge: newsletterSubscribers.filter(s => s.isActive).length },
           { id: 'system', label: 'System, Media & Security', labelAr: 'أمان، وسائط والملفات', icon: Shield }
         ].map(tab => (
           <button
@@ -362,15 +380,6 @@ export const Dashboard: React.FC = () => {
 
       {/* Main Active Panel Area */}
       <div className="flex-1 bg-white dark:bg-gray-900/40 rounded-none border border-gray-150 dark:border-gray-900 p-6 sm:p-8 shadow-xl min-h-[70vh]">
-        {/* Hidden file input for image uploads */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="image/*"
-          className="hidden"
-        />
-
         
         {/* TAB 1: CONSOLE OVERVIEW & LIVE ANALYTICS */}
         {activeTab === 'overview' && (
@@ -563,7 +572,6 @@ export const Dashboard: React.FC = () => {
                                   alert('Upload failed' + (message ? `: ${message}` : ''));
                                 } finally {
                                   setIsUploadingFile(false);
-                                  input.value = '';
                                 }
                               }
                             };
@@ -739,16 +747,38 @@ export const Dashboard: React.FC = () => {
                           <p className="text-[9px] text-gray-500 font-mono">{post.date} • {post.author}</p>
                         </div>
                       </div>
-                      <button onClick={async () => {
-                        if (confirm('Delete article?')) {
-                          try {
-                            await deleteBlogPost(post.id);
-                            addAuditLog(`Deleted blog ${post.title}`, `تم حذف مقال ${post.titleAr}`);
-                          } catch (e) { alert('Failed to delete'); }
-                        }
-                      }} className="p-1.5 hover:text-red-500 rounded text-gray-400">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={notifyingPostId === post.id}
+                          onClick={async () => {
+                            if (!confirm(isRtl ? `إرسال إشعار بريدي لكل المشتركين حول "${post.title}"؟` : `Email all subscribers about "${post.title}"?`)) return;
+                            setNotifyingPostId(post.id);
+                            try {
+                              const result = await notifyBlogPostSubscribers(post.id);
+                              alert(isRtl ? `تم الإرسال إلى ${result.sent} مشترك (فشل: ${result.failed})` : `Sent to ${result.sent} subscribers (failed: ${result.failed})`);
+                              addAuditLog(`Notified subscribers about blog post ${post.title}`, `تم إشعار المشتركين بمقال ${post.titleAr}`);
+                            } catch (e) {
+                              alert(e instanceof Error ? e.message : 'Failed to notify subscribers');
+                            } finally {
+                              setNotifyingPostId(null);
+                            }
+                          }}
+                          title={isRtl ? 'إشعار المشتركين' : 'Notify Subscribers'}
+                          className="p-1.5 hover:text-accent rounded text-gray-400 disabled:opacity-50"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={async () => {
+                          if (confirm('Delete article?')) {
+                            try {
+                              await deleteBlogPost(post.id);
+                              addAuditLog(`Deleted blog ${post.title}`, `تم حذف مقال ${post.titleAr}`);
+                            } catch (e) { alert('Failed to delete'); }
+                          }
+                        }} className="p-1.5 hover:text-red-500 rounded text-gray-400">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1708,6 +1738,45 @@ export const Dashboard: React.FC = () => {
                         <FileDown className="w-4 h-4" />
                         {generatingPdf ? (isRtl ? 'جارٍ الإنشاء...' : 'Generating...') : (isRtl ? 'إنشاء عرض PDF رسمي' : 'Generate Official PDF')}
                       </button>
+                      <button
+                        disabled={sendingTrackingEmail}
+                        onClick={async () => {
+                          setSendingTrackingEmail(true);
+                          try {
+                            await sendQuoteTrackingUpdate(activeQuoteId);
+                            addAuditLog(`Emailed tracking status update for ${activeQuoteId}`, `تم إرسال تحديث الحالة عبر البريد لـ ${activeQuoteId}`);
+                            alert(isRtl ? 'تم إرسال البريد بنجاح' : 'Email sent successfully');
+                          } catch (e) {
+                            alert(e instanceof Error ? e.message : 'Failed to send email');
+                          } finally { setSendingTrackingEmail(false); }
+                        }}
+                        className="px-5 py-2.5 border border-gray-300 dark:border-gray-700 hover:border-accent hover:text-accent text-gray-500 font-semibold text-xs uppercase tracking-widest rounded transition-all inline-flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <Mail className="w-4 h-4" />
+                        {sendingTrackingEmail ? (isRtl ? 'جارٍ الإرسال...' : 'Sending...') : (isRtl ? 'إرسال تحديث الحالة بالبريد' : 'Email Status Update')}
+                      </button>
+                      <button
+                        disabled={emailingPdfId === activeQuoteId}
+                        onClick={async () => {
+                          const activeQuote = quotes.find(q => q.id === activeQuoteId);
+                          if (!activeQuote) return;
+                          if (!activeQuote.email) { alert(isRtl ? 'لا يوجد بريد إلكتروني لهذا الزبون' : 'This customer has no email on file'); return; }
+                          setEmailingPdfId(activeQuoteId);
+                          try {
+                            const { getQuotePdfBase64 } = await import('../lib/generateQuotePdf.ts');
+                            const pdfBase64 = await getQuotePdfBase64({ ...activeQuote, quoteItems: quoteLineItems }, settings);
+                            await emailQuotationPdf(activeQuote.email, activeQuote.name, activeQuoteId, pdfBase64);
+                            addAuditLog(`Emailed PDF quotation for ${activeQuoteId}`, `تم إرسال ملف PDF لـ ${activeQuoteId}`);
+                            alert(isRtl ? 'تم إرسال الملف بنجاح' : 'PDF emailed successfully');
+                          } catch (e) {
+                            alert(e instanceof Error ? e.message : 'Failed to email PDF');
+                          } finally { setEmailingPdfId(null); }
+                        }}
+                        className="px-5 py-2.5 border border-gray-300 dark:border-gray-700 hover:border-accent hover:text-accent text-gray-500 font-semibold text-xs uppercase tracking-widest rounded transition-all inline-flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <Mail className="w-4 h-4" />
+                        {emailingPdfId === activeQuoteId ? (isRtl ? 'جارٍ الإرسال...' : 'Sending...') : (isRtl ? 'إرسال PDF بالبريد' : 'Email PDF to Customer')}
+                      </button>
                     </div>
                   )}
                 </motion.div>
@@ -1747,6 +1816,154 @@ export const Dashboard: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+
+        {/* TAB: NEWSLETTER SUBSCRIBERS */}
+        {activeTab === 'newsletter' && (
+          <div className="space-y-8 text-left">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div>
+                <h3 className="font-serif text-2xl font-medium text-gray-950 dark:text-white">{isRtl ? 'المشتركون بالنشرة البريدية' : 'Newsletter Subscribers'}</h3>
+                <p className="text-xs text-gray-400 mt-1">{isRtl ? 'إدارة قائمة المشتركين، البحث، والتصدير.' : 'Manage subscriber list, search, and export.'}</p>
+              </div>
+              <div className="flex gap-2 font-mono text-[10px]">
+                <button onClick={() => {
+                  const csv = [
+                    ['Email', 'Name', 'Status', 'Subscribed At'].join(','),
+                    ...filteredSubscribers.map(s => [
+                      s.email,
+                      `"${(s.name || '').replace(/"/g, '""')}"`,
+                      s.isActive ? 'Active' : 'Inactive',
+                      new Date(s.createdAt).toISOString()
+                    ].join(','))
+                  ].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `newsletter_subscribers_${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  addAuditLog('Exported newsletter subscribers to CSV', 'تم تصدير المشتركين إلى CSV');
+                }} className="px-3 py-1.5 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white hover:border-accent hover:text-accent rounded-none transition-colors flex items-center gap-1">
+                  <Download className="w-3.5 h-3.5" />
+                  {isRtl ? 'تصدير CSV' : 'Export CSV'}
+                </button>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-5 rounded-none border border-accent/20 bg-accent/5 text-accent flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono tracking-wider uppercase text-gray-400 block">{isRtl ? 'إجمالي المشتركين' : 'Total Subscribers'}</span>
+                  <span className="text-xl font-bold font-mono block">{newsletterSubscribers.length}</span>
+                </div>
+                <Users className="w-5 h-5 opacity-50" />
+              </div>
+              <div className="p-5 rounded-none border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-950/10 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono tracking-wider uppercase text-gray-400 block">{isRtl ? 'نشطون' : 'Active'}</span>
+                  <span className="text-xl font-bold font-mono block">{newsletterSubscribers.filter(s => s.isActive).length}</span>
+                </div>
+                <CheckCircle className="w-5 h-5 opacity-50" />
+              </div>
+              <div className="p-5 rounded-none border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-950/10 text-gray-800 dark:text-gray-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono tracking-wider uppercase text-gray-400 block">{isRtl ? 'غير نشطين' : 'Inactive'}</span>
+                  <span className="text-xl font-bold font-mono block">{newsletterSubscribers.filter(s => !s.isActive).length}</span>
+                </div>
+                <Circle className="w-5 h-5 opacity-50" />
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={subscriberSearch}
+                  onChange={e => setSubscriberSearch(e.target.value)}
+                  placeholder={isRtl ? 'البحث بالبريد أو الاسم...' : 'Search by email or name...'}
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none pl-9 pr-3 py-2 text-xs text-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* Subscribers Table */}
+            <div className="bg-gray-50 dark:bg-gray-950 border border-gray-150 dark:border-gray-900 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-xs font-sans text-gray-700 dark:text-gray-300">
+                <thead className="bg-gray-100 dark:bg-gray-900 text-gray-400 uppercase font-mono text-[9px] border-b border-gray-150 dark:border-gray-800">
+                  <tr>
+                    <th className="p-4">ID</th>
+                    <th className="p-4">Email</th>
+                    <th className="p-4">Name</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Subscribed</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                  {filteredSubscribers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-gray-400 text-xs">
+                        {isRtl ? 'لا يوجد مشتركون مطابقون.' : 'No matching subscribers.'}
+                      </td>
+                    </tr>
+                  )}
+                  {filteredSubscribers.map(s => (
+                    <tr key={s.id} className="hover:bg-gray-100/5 transition-colors">
+                      <td className="p-4 font-mono font-bold text-accent">{s.id}</td>
+                      <td className="p-4 text-gray-900 dark:text-white">{s.email}</td>
+                      <td className="p-4 text-gray-500">{s.name || '—'}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase font-bold border ${
+                          s.isActive
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25'
+                            : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                        }`}>
+                          {s.isActive ? (isRtl ? 'نشط' : 'Active') : (isRtl ? 'غير نشط' : 'Inactive')}
+                        </span>
+                      </td>
+                      <td className="p-4 text-gray-400">{new Date(s.createdAt).toLocaleDateString(isRtl ? 'ar-DZ' : 'en-US')}</td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await toggleNewsletterSubscriber(s.id, !s.isActive);
+                                addAuditLog(`Toggled subscriber ${s.email} to ${!s.isActive ? 'active' : 'inactive'}`, `تم تغيير حالة المشترك ${s.email}`);
+                              } catch { alert('Failed to toggle'); }
+                            }}
+                            className={`p-1.5 rounded transition-colors ${s.isActive ? 'text-emerald-500' : 'text-gray-400'}`}
+                            title={s.isActive ? (isRtl ? 'إلغاء التفعيل' : 'Deactivate') : (isRtl ? 'تفعيل' : 'Activate')}
+                          >
+                            {s.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm(isRtl ? `هل أنت متأكد من حذف ${s.email}؟` : `Delete subscriber ${s.email}?`)) {
+                                try {
+                                  await deleteNewsletterSubscriber(s.id);
+                                  addAuditLog(`Deleted subscriber ${s.email}`, `تم حذف المشترك ${s.email}`);
+                                } catch { alert('Failed to delete'); }
+                              }
+                            }}
+                            className="p-1.5 hover:text-red-500 rounded text-gray-400 transition-colors"
+                            title={isRtl ? 'حذف' : 'Delete'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1837,7 +2054,14 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
         )}
-
+     {/* Hidden File Input for Image/Media Uploads */}
+    <input
+  type="file"
+  ref={fileInputRef}
+  onChange={handleFileChange}
+  className="hidden"
+  accept="image/*"
+/>
       </div>
     </div>
   );

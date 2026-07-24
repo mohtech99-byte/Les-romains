@@ -29,7 +29,9 @@ import {
   estimations,
   activityLogs,
   customerQuotations,
-  customerQuotationItems
+  customerQuotationItems,
+  newsletterSubscribers,
+  emailLogs
 } from './src/db/schema.ts';
 import { requireAuth, requireRole, AuthRequest } from './src/middleware/auth.ts';
 import {
@@ -43,6 +45,9 @@ import {
 } from './src/data/initialData.ts';
 import { initialWorkshopPricing } from './src/data/workshopPricingSeed.ts';
 import { uploadFileToStorage } from './src/lib/storage.ts';
+import { sendEmail, sendBulkEmail, isEmailConfigured } from './src/lib/email.ts';
+import { buildNewsletterEmail, buildBroadcastEmail, buildTrackingStatusEmail, buildQuotationPdfEmail } from './src/lib/emailTemplates.ts';
+import crypto from 'crypto';
 import {
   buildRateMap, rate,
   calcSheet, calcLetters, calcAlucobond, calcPainting, calcLaser, calcRouting, calcInstallation
@@ -1600,6 +1605,258 @@ app.post('/api/media/upload', requireAuth, requireRole(['admin', 'manager', 'edi
     console.error('File upload route error:', error);
     const detail = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: `File upload failed: ${detail}` });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Newsletter Subscribers — public subscribe, admin-only list/manage/export.
+// ---------------------------------------------------------------------------
+
+app.post('/api/newsletter/subscribe', publicWriteLimiter, async (req, res) => {
+  try {
+    const { email, name } = req.body || {};
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if already exists
+    const existing = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.email, normalizedEmail)).limit(1);
+    if (existing.length > 0) {
+      // If unsubscribed, re-subscribe them
+      if (!existing[0].isActive) {
+        await db.update(newsletterSubscribers)
+          .set({ isActive: true })
+          .where(eq(newsletterSubscribers.id, existing[0].id));
+        return res.json({ success: true, message: 'Re-subscribed successfully' });
+      }
+      return res.status(409).json({ error: 'Email already subscribed' });
+    }
+
+    const inserted = await db.insert(newsletterSubscribers).values({
+      email: normalizedEmail,
+      name: (name || '').trim(),
+      isActive: true,
+      unsubscribeToken: crypto.randomUUID(),
+    }).returning();
+
+    res.json(inserted[0]);
+  } catch (error) {
+    console.error('Error subscribing to newsletter:', error);
+    res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+// Public one-click unsubscribe — no login required, uses the opaque token
+// mailed in every newsletter/broadcast footer.
+app.get('/api/newsletter/unsubscribe/:token', async (req, res) => {
+  try {
+    const rows = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.unsubscribeToken, req.params.token)).limit(1);
+    if (rows.length === 0) {
+      return res.status(404).send('<html><body style="font-family:sans-serif; text-align:center; padding:60px;"><h2>Link not found</h2><p>This unsubscribe link is invalid or has already been used.</p></body></html>');
+    }
+    await db.update(newsletterSubscribers).set({ isActive: false }).where(eq(newsletterSubscribers.id, rows[0].id));
+    res.send('<html><body style="font-family:sans-serif; text-align:center; padding:60px;"><h2>You have been unsubscribed</h2><p>You will no longer receive emails from LES ROMAINS. You can re-subscribe any time from our website.</p></body></html>');
+  } catch (error) {
+    console.error('Error unsubscribing:', error);
+    res.status(500).send('Something went wrong.');
+  }
+});
+
+app.get('/api/newsletter/subscribers', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const rows = await db.select().from(newsletterSubscribers).orderBy(desc(newsletterSubscribers.createdAt));
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching newsletter subscribers:', error);
+    res.status(500).json({ error: 'Database query failed' });
+  }
+});
+
+app.put('/api/newsletter/subscribers/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const subscriberId = parseInt(req.params.id, 10);
+    const { isActive } = req.body;
+    const updated = await db.update(newsletterSubscribers)
+      .set({ isActive: isActive !== false })
+      .where(eq(newsletterSubscribers.id, subscriberId))
+      .returning();
+    if (updated.length === 0) return res.status(404).json({ error: 'Subscriber not found' });
+    res.json(updated[0]);
+  } catch (error) {
+    console.error('Error updating subscriber:', error);
+    res.status(500).json({ error: 'Failed to update subscriber' });
+  }
+});
+
+app.delete('/api/newsletter/subscribers/:id', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const subscriberId = parseInt(req.params.id, 10);
+    await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.id, subscriberId));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting subscriber:', error);
+    res.status(500).json({ error: 'Failed to delete subscriber' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Email sending — newsletter broadcasts, order tracking updates, and
+// quotation PDFs. All admin/manager-only. Every attempt is logged to
+// email_logs regardless of outcome.
+// ---------------------------------------------------------------------------
+
+async function logEmail(entry: {
+  type: 'newsletter' | 'broadcast' | 'tracking_update' | 'quotation_pdf';
+  recipient: string;
+  subject: string;
+  status: 'sent' | 'failed';
+  errorMessage?: string;
+  relatedId?: string;
+}) {
+  try {
+    await db.insert(emailLogs).values(entry);
+  } catch (e) {
+    console.error('Failed to write email log:', e);
+  }
+}
+
+const getAppUrl = () => process.env.APP_URL || 'https://lesromains.com';
+
+app.get('/api/email/status', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  res.json({ configured: isEmailConfigured() });
+});
+
+app.get('/api/email-logs', requireAuth, requireRole(['admin']), async (req, res) => {
+  try {
+    const rows = await db.select().from(emailLogs).orderBy(desc(emailLogs.createdAt)).limit(300);
+    res.json(rows.map(r => ({ ...r, date: r.createdAt })));
+  } catch (error) {
+    console.error('Error fetching email logs:', error);
+    res.status(500).json({ error: 'Database query failed' });
+  }
+});
+
+// Broadcast a custom message to every active subscriber.
+app.post('/api/newsletter/broadcast', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const { subject, bodyHtml } = req.body || {};
+    if (!subject || !bodyHtml) {
+      return res.status(400).json({ error: 'Subject and message body are required' });
+    }
+    const subscribers = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.isActive, true));
+    if (subscribers.length === 0) {
+      return res.json({ sent: 0, failed: 0, message: 'No active subscribers' });
+    }
+
+    const appUrl = getAppUrl();
+    let sent = 0, failed = 0;
+    for (const sub of subscribers) {
+      const html = buildBroadcastEmail({
+        subject,
+        bodyHtml,
+        appUrl,
+        unsubscribeUrl: `${appUrl.replace(/\/$/, '')}/api/newsletter/unsubscribe/${sub.unsubscribeToken}`,
+      });
+      const result = await sendEmail({ to: sub.email, subject, html });
+      await logEmail({ type: 'broadcast', recipient: sub.email, subject, status: result.success ? 'sent' : 'failed', errorMessage: result.error });
+      if (result.success) sent++; else failed++;
+    }
+    res.json({ sent, failed });
+  } catch (error) {
+    console.error('Error sending broadcast:', error);
+    res.status(500).json({ error: 'Failed to send broadcast' });
+  }
+});
+
+// Notify all subscribers about a specific blog post.
+app.post('/api/blog/:id/notify', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const postRows = await db.select().from(blogPosts).where(eq(blogPosts.id, req.params.id)).limit(1);
+    if (postRows.length === 0) return res.status(404).json({ error: 'Post not found' });
+    const post = postRows[0];
+
+    const subscribers = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.isActive, true));
+    if (subscribers.length === 0) {
+      return res.json({ sent: 0, failed: 0, message: 'No active subscribers' });
+    }
+
+    const appUrl = getAppUrl();
+    const subject = `New from LES ROMAINS: ${post.title}`;
+    let sent = 0, failed = 0;
+    for (const sub of subscribers) {
+      const html = buildNewsletterEmail({
+        title: post.title,
+        excerpt: post.excerpt,
+        postUrl: appUrl,
+        appUrl,
+        unsubscribeUrl: `${appUrl.replace(/\/$/, '')}/api/newsletter/unsubscribe/${sub.unsubscribeToken}`,
+      });
+      const result = await sendEmail({ to: sub.email, subject, html });
+      await logEmail({ type: 'newsletter', recipient: sub.email, subject, status: result.success ? 'sent' : 'failed', errorMessage: result.error, relatedId: post.id });
+      if (result.success) sent++; else failed++;
+    }
+    res.json({ sent, failed });
+  } catch (error) {
+    console.error('Error notifying subscribers about post:', error);
+    res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
+
+// Email a tracking status update to the customer on a public quote request.
+app.post('/api/quotes/:id/notify-status', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const rows = await db.select().from(quotes).where(eq(quotes.id, req.params.id)).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: 'Quote not found' });
+    const quote = rows[0];
+    if (!quote.email) return res.status(400).json({ error: 'This quote has no customer email on file' });
+
+    const appUrl = getAppUrl();
+    const subject = `Order Update — ${quote.id}`;
+    const html = buildTrackingStatusEmail({
+      customerName: quote.name,
+      quotationNumber: quote.id,
+      status: quote.status,
+      trackUrl: `${appUrl.replace(/\/$/, '')}/?track=${quote.id}`,
+      appUrl,
+    });
+    const result = await sendEmail({ to: quote.email, subject, html });
+    await logEmail({ type: 'tracking_update', recipient: quote.email, subject, status: result.success ? 'sent' : 'failed', errorMessage: result.error, relatedId: quote.id });
+    if (!result.success) return res.status(502).json({ error: result.error || 'Failed to send email' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error sending tracking status email:', error);
+    res.status(500).json({ error: 'Failed to send tracking status email' });
+  }
+});
+
+// Email a generated quotation PDF (base64, built client-side by the existing
+// generateQuotePdf logic) as an attachment. Works for both the public quote
+// pipeline and Customer Quotation Management — caller supplies the recipient.
+app.post('/api/email/send-pdf', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const { to, customerName, quotationNumber, pdfBase64 } = req.body || {};
+    if (!to || !pdfBase64 || !quotationNumber) {
+      return res.status(400).json({ error: 'to, quotationNumber, and pdfBase64 are required' });
+    }
+
+    const appUrl = getAppUrl();
+    const subject = `Your Quotation — ${quotationNumber}`;
+    const html = buildQuotationPdfEmail({ customerName: customerName || 'Customer', quotationNumber, appUrl });
+    const result = await sendEmail({
+      to,
+      subject,
+      html,
+      attachments: [{ filename: `${quotationNumber}-quotation.pdf`, content: pdfBase64 }],
+    });
+    await logEmail({ type: 'quotation_pdf', recipient: to, subject, status: result.success ? 'sent' : 'failed', errorMessage: result.error, relatedId: quotationNumber });
+    if (!result.success) return res.status(502).json({ error: result.error || 'Failed to send email' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error emailing quotation PDF:', error);
+    res.status(500).json({ error: 'Failed to email quotation PDF' });
   }
 });
 

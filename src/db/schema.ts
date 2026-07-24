@@ -299,3 +299,28 @@ export const customerQuotationItemsRelations = relations(customerQuotationItems,
     references: [customerQuotations.id],
   }),
 }));
+
+// 15. Newsletter Subscribers — public sign-ups, admin-only management.
+export const newsletterSubscribers = pgTable('newsletter_subscribers', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  name: text('name').default(''),
+  isActive: boolean('is_active').default(true).notNull(),
+  unsubscribeToken: text('unsubscribe_token').notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 16. Email Logs — records every email the app attempts to send (newsletter
+// broadcasts, order tracking updates, quotation PDFs). Admin-only visibility,
+// useful for confirming delivery attempts and debugging failures.
+export const emailLogs = pgTable('email_logs', {
+  id: serial('id').primaryKey(),
+  type: text('type', { enum: ['newsletter', 'broadcast', 'tracking_update', 'quotation_pdf'] }).notNull(),
+  recipient: text('recipient').notNull(),
+  subject: text('subject').notNull(),
+  status: text('status', { enum: ['sent', 'failed'] }).notNull(),
+  errorMessage: text('error_message'),
+  relatedId: text('related_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+

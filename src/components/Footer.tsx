@@ -8,18 +8,33 @@ import { useApp } from '../store/AppContext';
 import { Phone, Mail, MapPin, Clock, Facebook, Instagram, Send } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { language, settings, setCurrentView } = useApp();
+  const { language, settings, setCurrentView, subscribeNewsletter } = useApp();
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
+  const [subscribeError, setSubscribeError] = useState('');
+  const [subscribing, setSubscribing] = useState(false);
 
   const isRtl = language === 'ar';
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
+    if (!email.trim()) return;
+    setSubscribeError('');
+    setSubscribing(true);
+    try {
+      await subscribeNewsletter(email.trim());
       setSubscribed(true);
       setEmail('');
       setTimeout(() => setSubscribed(false), 4000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setSubscribeError(
+        message.includes('already')
+          ? (isRtl ? 'هذا البريد مشترك بالفعل' : 'This email is already subscribed')
+          : (isRtl ? 'فشل الاشتراك، حاول مجدداً' : 'Subscription failed, please try again')
+      );
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -175,7 +190,7 @@ export const Footer: React.FC = () => {
               <li className="flex items-start gap-2.5">
                 <Phone className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الرئيسية (ساجد شيباكي)' : 'PRIMARY (SADJED CHEBAKI)'}</span>
+                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الرئيسية (ساجد شباكي)' : 'PRIMARY (SADJED CHEBAKI)'}</span>
                   <div className="flex flex-col font-mono text-[11px] space-y-0.5">
                     <a href="tel:+213675858793" className="hover:text-accent transition-colors">+213 (0) 675 858 793</a>
                     <a href="tel:+213552851836" className="hover:text-accent transition-colors">+213 (0) 552 851 836</a>
@@ -185,7 +200,7 @@ export const Footer: React.FC = () => {
               <li className="flex items-start gap-2.5">
                 <Phone className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الثانوية (عبد النور)' : 'SECONDARY (ABDENOUR)'}</span>
+                  <span className="font-semibold text-white block text-[10px] uppercase font-mono tracking-wider">{isRtl ? 'جهة الاتصال الثانوية (عبد النور كموني)' : 'SECONDARY (ABDENOUR KEMOUNI)'}</span>
                   <a href="tel:+213656229615" className="hover:text-accent/80 transition-colors font-mono text-[11px]">+213 (0) 656 229 615</a>
                 </div>
               </li>
@@ -223,7 +238,8 @@ export const Footer: React.FC = () => {
                 />
                 <button 
                   type="submit" 
-                  className="absolute right-1 top-1 bottom-1 px-3 bg-accent hover:bg-accent-dark text-black rounded-none flex items-center justify-center transition-colors"
+                  disabled={subscribing}
+                  className="absolute right-1 top-1 bottom-1 px-3 bg-accent hover:bg-accent-dark text-black rounded-none flex items-center justify-center transition-colors disabled:opacity-60"
                 >
                   <Send className="w-3.5 h-3.5" />
                 </button>
@@ -231,6 +247,11 @@ export const Footer: React.FC = () => {
               {subscribed && (
                 <span className="text-[10px] text-accent font-medium font-mono">
                   {isRtl ? 'تم الاشتراك بنجاح!' : 'Successfully subscribed!'}
+                </span>
+              )}
+              {subscribeError && (
+                <span className="text-[10px] text-red-400 font-medium font-mono">
+                  {subscribeError}
                 </span>
               )}
             </form>

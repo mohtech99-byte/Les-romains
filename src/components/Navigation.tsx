@@ -311,7 +311,7 @@ export const Navigation: React.FC = () => {
                 
                 <div className="space-y-3">
                   <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider">{isRtl ? 'المالك: ساجد شيباكي' : 'Owner: Sadjed Chebaki'}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider">{isRtl ? 'المالك: ساجد شباكي' : 'Owner: Sadjed Chebaki'}</p>
                     <div className="flex flex-col gap-1 mt-1 font-mono text-xs font-bold text-white">
                       <a href="tel:+213675858793" className="hover:text-accent transition-colors">+213 (0) 675 858 793</a>
                       <a href="tel:+213552851836" className="hover:text-accent transition-colors">+213 (0) 552 851 836</a>
@@ -319,7 +319,7 @@ export const Navigation: React.FC = () => {
                   </div>
 
                   <div className="text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider">{isRtl ? 'مسؤول المشاريع: عبد النور' : 'Projects: Abdenour'}</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider">{isRtl ? 'مسؤول المشاريع: عبد النور كموني' : 'Projects: Abdenour Kemouni'}</p>
                     <a href="tel:+213656229615" className="font-mono text-xs font-bold text-white hover:text-accent transition-colors block mt-0.5">
                       +213 (0) 656 229 615
                     </a>

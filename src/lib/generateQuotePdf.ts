@@ -22,7 +22,7 @@ async function loadLogo(): Promise<string> {
  * English/Latin script, which is also standard practice for formal business
  * quotations in Algeria (often bilingual FR/EN or EN alongside Arabic).
  */
-export async function generateQuotePdf(quote: QuoteRequest, settings: AppSettings) {
+async function buildQuotePdfDoc(quote: QuoteRequest, settings: AppSettings): Promise<jsPDF> {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 40;
@@ -143,5 +143,24 @@ const cardHeight = 70;
   doc.setTextColor(150);
   doc.text('LES ROMAINS — This is a computer-generated quotation and does not require a signature.', pageWidth / 2, pageHeight - 34, { align: 'center' });
 
+  return doc;
+}
+
+/**
+ * Generates a professional quotation PDF and triggers a browser download.
+ * Unchanged behavior from before this refactor — every existing call site
+ * works identically.
+ */
+export async function generateQuotePdf(quote: QuoteRequest, settings: AppSettings) {
+  const doc = await buildQuotePdfDoc(quote, settings);
   doc.save(`${quote.id}-quotation.pdf`);
+}
+
+/**
+ * Same PDF, returned as a base64 string instead of triggering a download —
+ * used to attach the quotation to an email via the server's /api/email/send-pdf.
+ */
+export async function getQuotePdfBase64(quote: QuoteRequest, settings: AppSettings): Promise<string> {
+  const doc = await buildQuotePdfDoc(quote, settings);
+  return doc.output('datauristring').split(',')[1];
 }

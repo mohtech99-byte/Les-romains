@@ -33,6 +33,25 @@ export interface ContactMessage {
   createdAt: string;
 }
 
+export interface NewsletterSubscriber {
+  id: number;
+  email: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface EmailLog {
+  id: number;
+  type: 'newsletter' | 'broadcast' | 'tracking_update' | 'quotation_pdf';
+  recipient: string;
+  subject: string;
+  status: 'sent' | 'failed';
+  errorMessage?: string;
+  relatedId?: string;
+  date: string;
+}
+
 interface AppContextType {
   language: 'en' | 'ar';
   setLanguage: (lang: 'en' | 'ar') => void;
@@ -63,7 +82,8 @@ interface AppContextType {
   estimations: WorkshopEstimation[];
   activityLogs: ActivityLog[];
   customerQuotations: CustomerQuotation[];
-  
+  newsletterSubscribers: NewsletterSubscriber[];
+
   // Refetches
   refetchAllPublicData: () => Promise<void>;
   refetchAllAdminData: () => Promise<void>;
@@ -80,6 +100,7 @@ interface AppContextType {
   // CRM Submission Helpers (Public)
   addQuote: (quote: Omit<QuoteRequest, 'id' | 'status' | 'date'>) => Promise<any>;
   submitContactMessage: (name: string, email: string, message: string) => Promise<any>;
+  subscribeNewsletter: (email: string, name?: string) => Promise<any>;
   
   // CRUD Helpers (Protected)
   saveSettings: (newSettings: AppSettings) => Promise<any>;
@@ -110,7 +131,14 @@ interface AppContextType {
   updateCustomerQuotation: (id: number, data: CustomerQuotationInput) => Promise<CustomerQuotation>;
   deleteCustomerQuotation: (id: number) => Promise<any>;
   duplicateCustomerQuotation: (id: number) => Promise<CustomerQuotation>;
-  
+  deleteNewsletterSubscriber: (id: number) => Promise<any>;
+  toggleNewsletterSubscriber: (id: number, isActive: boolean) => Promise<any>;
+  sendNewsletterBroadcast: (subject: string, bodyHtml: string) => Promise<{ sent: number; failed: number }>;
+  notifyBlogPostSubscribers: (postId: string) => Promise<{ sent: number; failed: number }>;
+  sendQuoteTrackingUpdate: (quoteId: string) => Promise<void>;
+  emailQuotationPdf: (to: string, customerName: string, quotationNumber: string, pdfBase64: string) => Promise<void>;
+  emailLogs: EmailLog[];
+
   resetToDefault: () => void;
 }
 
@@ -154,10 +182,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [estimations, setEstimations] = useState<WorkshopEstimation[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [customerQuotations, setCustomerQuotations] = useState<CustomerQuotation[]>([]);
+  const [newsletterSubscribers, setNewsletterSubscribers] = useState<NewsletterSubscriber[]>([]);
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
 
-  // -----------------------------------------------------------------------------
-  // Dynamic Token & Request Helper
-  // -----------------------------------------------------------------------------
+  // Helper
   const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
     const { data: { session } } = await supabase.auth.getSession();
     const currentToken = session?.access_token || null;
@@ -177,9 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // -----------------------------------------------------------------------------
   // Loaders
-  // -----------------------------------------------------------------------------
   const refetchAllPublicData = async () => {
     try {
       const [settingsRes, servicesRes, projectsRes, productsRes, testimonialsRes, blogRes, pricingRes, workshopOptionsRes] = await Promise.all([
@@ -212,7 +238,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refetchAllAdminData = async () => {
     if (!user) return;
     try {
-      const [quotesRes, msgRes, mediaRes, workshopPricingRes, estimationsRes, activityLogsRes, customerQuotationsRes] = await Promise.all([
+      const [quotesRes, msgRes, mediaRes, workshopPricingRes, estimationsRes, activityLogsRes, customerQuotationsRes, newsletterSubscribersRes, emailLogsRes] = await Promise.all([
         fetchWithAuth('/api/quotes'),
         fetchWithAuth('/api/messages'),
         fetchWithAuth('/api/media'),
@@ -220,6 +246,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchWithAuth('/api/estimations'),
         fetchWithAuth('/api/activity-logs'),
         fetchWithAuth('/api/customer-quotations'),
+        fetchWithAuth('/api/newsletter/subscribers'),
+        fetchWithAuth('/api/email-logs'),
       ]);
 
       if (quotesRes.ok) setQuotes(await quotesRes.json());
@@ -229,15 +257,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (estimationsRes.ok) setEstimations(await estimationsRes.json());
       if (activityLogsRes.ok) setActivityLogs(await activityLogsRes.json());
       if (customerQuotationsRes.ok) setCustomerQuotations(await customerQuotationsRes.json());
+      if (newsletterSubscribersRes.ok) setNewsletterSubscribers(await newsletterSubscribersRes.json());
+      if (emailLogsRes.ok) setEmailLogs(await emailLogsRes.json());
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
     }
   };
 
-
-  // -----------------------------------------------------------------------------
-  // Supabase Auth Synchronization & State Management
-  // -----------------------------------------------------------------------------
   const syncUserRole = async (accessToken: string) => {
     try {
       const meRes = await fetch('/api/me', {
@@ -258,8 +284,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
 
-    // On mount, check whether a Supabase session already exists (e.g. the
-    // user previously logged in and the session was persisted in this browser).
     const initSession = async () => {
       setIsLoadingAuth(true);
       const { data: { session } } = await supabase.auth.getSession();
@@ -276,8 +300,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     initSession();
 
-    // Keep local state in sync with any future auth changes (sign in, sign
-    // out, token refresh) triggered elsewhere in the app or in another tab.
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
 
@@ -298,19 +320,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Load public data on mount
   useEffect(() => {
     refetchAllPublicData();
   }, []);
 
-  // Load admin data when authorized user signs in
   useEffect(() => {
     if (user && userRole) {
       refetchAllAdminData();
     }
   }, [user, userRole]);
 
-  // Localization & Theme class updating
   useEffect(() => {
     localStorage.setItem('lr_lang', language);
     document.dir = language === 'ar' ? 'rtl' : 'ltr';
@@ -321,9 +340,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.classList.add('dark');
   }, []);
 
-  // -----------------------------------------------------------------------------
-  // Auth Helpers
-  // -----------------------------------------------------------------------------
   const login = async (email: string, password: string) => {
     setAuthError(null);
     try {
@@ -336,10 +352,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAuthError(error.message);
         throw error;
       }
-      // Record the sign-in for the admin-only activity log. Uses the
-      // server-verified identity (via requireAuth), so this can never be
-      // spoofed to log a different user than the one who actually signed in.
-      // Best-effort: a logging failure should never block the login itself.
       fetchWithAuth('/api/activity-logs', {
         method: 'POST',
         body: JSON.stringify({ action: 'login' }),
@@ -365,9 +377,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // -----------------------------------------------------------------------------
-  // Public Submission Forms
-  // -----------------------------------------------------------------------------
   const addQuote = async (quoteData: Omit<QuoteRequest, 'id' | 'status' | 'date'>) => {
     try {
       const res = await fetch('/api/quotes', {
@@ -377,7 +386,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       if (!res.ok) throw new Error('Failed to submit quote');
       const data = await res.json();
-      // If admin is logged in, append to active quotes state
       if (user) {
         setQuotes(prev => [data, ...prev]);
       }
@@ -407,9 +415,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // -----------------------------------------------------------------------------
-  // Protected CRUD CMS / Portfolio / CRM Operations
-  // -----------------------------------------------------------------------------
   const saveSettings = async (newSettings: AppSettings) => {
     try {
       const res = await fetchWithAuth('/api/settings', {
@@ -761,9 +766,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Public order tracking — no auth, used by the customer-facing "Track your
-  // quotation" page. Returns null (rather than throwing) on a bad/unknown ID
-  // so the UI can show a friendly "not found" state.
   const trackQuote = async (id: string): Promise<TrackedQuote | null> => {
     try {
       const res = await fetch(`/api/quotes/track/${encodeURIComponent(id)}`);
@@ -819,7 +821,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const body = await res.json();
           if (body?.error) message = body.error;
-        } catch { /* response wasn't JSON, keep generic message */ }
+        } catch { /* response wasn't JSON */ }
         throw new Error(message);
       }
       const uploadedFile = await res.json();
@@ -831,8 +833,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const subscribeNewsletter = async (email: string, name?: string) => {
+    try {
+      const res = await fetch('/api/newsletter/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to subscribe');
+      }
+      const data = await res.json();
+      if (user) {
+        setNewsletterSubscribers(prev => [data, ...prev]);
+      }
+      return data;
+    } catch (error) {
+      console.error('Error subscribing to newsletter:', error);
+      throw error;
+    }
+  };
+
+  const deleteNewsletterSubscriber = async (id: number) => {
+    try {
+      const res = await fetchWithAuth(`/api/newsletter/subscribers/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete subscriber');
+      setNewsletterSubscribers(prev => prev.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Error deleting newsletter subscriber:', error);
+      throw error;
+    }
+  };
+
+  const toggleNewsletterSubscriber = async (id: number, isActive: boolean) => {
+    try {
+      const res = await fetchWithAuth(`/api/newsletter/subscribers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isActive }),
+      });
+      if (!res.ok) throw new Error('Failed to update subscriber');
+      const updated = await res.json();
+      setNewsletterSubscribers(prev => prev.map(s => s.id === id ? updated : s));
+      return updated;
+    } catch (error) {
+      console.error('Error toggling newsletter subscriber:', error);
+      throw error;
+    }
+  };
+
+  const sendNewsletterBroadcast = async (subject: string, bodyHtml: string) => {
+    try {
+      const res = await fetchWithAuth('/api/newsletter/broadcast', {
+        method: 'POST',
+        body: JSON.stringify({ subject, bodyHtml }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to send broadcast');
+      }
+      return await res.json();
+    } catch (error) {
+      console.error('Error sending newsletter broadcast:', error);
+      throw error;
+    }
+  };
+
+  const notifyBlogPostSubscribers = async (postId: string) => {
+    try {
+      const res = await fetchWithAuth(`/api/blog/${postId}/notify`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to notify subscribers');
+      }
+      return await res.json();
+    } catch (error) {
+      console.error('Error notifying subscribers about post:', error);
+      throw error;
+    }
+  };
+
+  const sendQuoteTrackingUpdate = async (quoteId: string) => {
+    try {
+      const res = await fetchWithAuth(`/api/quotes/${quoteId}/notify-status`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to send tracking update');
+      }
+    } catch (error) {
+      console.error('Error sending tracking status email:', error);
+      throw error;
+    }
+  };
+
+  const emailQuotationPdf = async (to: string, customerName: string, quotationNumber: string, pdfBase64: string) => {
+    try {
+      const res = await fetchWithAuth('/api/email/send-pdf', {
+        method: 'POST',
+        body: JSON.stringify({ to, customerName, quotationNumber, pdfBase64 }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to email PDF');
+      }
+    } catch (error) {
+      console.error('Error emailing quotation PDF:', error);
+      throw error;
+    }
+  };
+
   const resetToDefault = async () => {
-    // Clear local storage and reload database values
     localStorage.removeItem('lr_services');
     localStorage.removeItem('lr_projects');
     localStorage.removeItem('lr_products');
@@ -867,6 +979,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       estimations,
       activityLogs,
       customerQuotations,
+      newsletterSubscribers,
+      emailLogs,
       
       refetchAllPublicData,
       refetchAllAdminData,
@@ -881,6 +995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       addQuote,
       submitContactMessage,
+      subscribeNewsletter,
       
       saveSettings,
       saveService,
@@ -910,7 +1025,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateCustomerQuotation,
       deleteCustomerQuotation,
       duplicateCustomerQuotation,
-      
+      deleteNewsletterSubscriber,
+      toggleNewsletterSubscriber,
+      sendNewsletterBroadcast,
+      notifyBlogPostSubscribers,
+      sendQuoteTrackingUpdate,
+      emailQuotationPdf,
+
       resetToDefault
     }}>
       {children}

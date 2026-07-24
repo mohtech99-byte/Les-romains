@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, FileDown, Copy, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileDown, Copy, Edit, Trash2, Mail } from 'lucide-react';
 import { useApp } from '../../store/AppContext.tsx';
 import { CustomerQuotation } from '../../types';
 import { StatusBadge, formatMoney } from './shared.tsx';
@@ -14,11 +14,30 @@ interface Props {
 }
 
 export const CustomerQuotationView: React.FC<Props> = ({ quotation, onBack, onEdit, onDeleted, onDuplicated }) => {
-  const { language, settings, deleteCustomerQuotation, duplicateCustomerQuotation } = useApp();
+  const { language, settings, deleteCustomerQuotation, duplicateCustomerQuotation, emailQuotationPdf } = useApp();
   const isRtl = language === 'ar';
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [emailingPdf, setEmailingPdf] = useState(false);
+
+  const handleEmailPdf = async () => {
+    if (!quotation.customerEmail) {
+      alert(isRtl ? 'لا يوجد بريد إلكتروني لهذا الزبون' : 'This customer has no email on file');
+      return;
+    }
+    setEmailingPdf(true);
+    try {
+      const { getQuotePdfBase64 } = await import('../../lib/generateQuotePdf.ts');
+      const pdfBase64 = await getQuotePdfBase64(mapCustomerQuotationForPdf(quotation), settings);
+      await emailQuotationPdf(quotation.customerEmail, quotation.customerName, quotation.quotationNumber, pdfBase64);
+      alert(isRtl ? 'تم إرسال الملف بنجاح' : 'PDF emailed successfully');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : (isRtl ? 'فشل إرسال البريد' : 'Failed to email PDF'));
+    } finally {
+      setEmailingPdf(false);
+    }
+  };
 
   const handleGeneratePdf = async () => {
     setGeneratingPdf(true);
@@ -149,6 +168,14 @@ export const CustomerQuotationView: React.FC<Props> = ({ quotation, onBack, onEd
         >
           <FileDown className="w-4 h-4" />
           {generatingPdf ? (isRtl ? 'جارٍ الإنشاء...' : 'Generating...') : (isRtl ? 'إنشاء PDF' : 'Generate PDF')}
+        </button>
+        <button
+          disabled={emailingPdf}
+          onClick={handleEmailPdf}
+          className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 dark:border-gray-700 hover:border-accent hover:text-accent text-gray-500 font-semibold text-xs uppercase tracking-widest rounded transition-all disabled:opacity-60"
+        >
+          <Mail className="w-4 h-4" />
+          {emailingPdf ? (isRtl ? 'جارٍ الإرسال...' : 'Sending...') : (isRtl ? 'إرسال PDF بالبريد' : 'Email PDF to Customer')}
         </button>
         <button
           disabled={duplicating}
