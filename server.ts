@@ -1723,7 +1723,7 @@ async function logEmail(entry: {
   }
 }
 
-const getAppUrl = () => process.env.APP_URL || 'https://lesromains.com';
+const getAppUrl = () => process.env.BASE_URL || process.env.APP_URL || 'http://localhost:3000';
 
 app.get('/api/email/status', requireAuth, requireRole(['admin', 'manager']), async (req, res) => {
   res.json({ configured: isEmailConfigured() });
