@@ -35,7 +35,7 @@ function wrapEmail(bodyHtml: string, appUrl: string, unsubscribeUrl?: string): s
           </tr>
           <tr>
             <td style="padding:20px 32px 32px; border-top:1px solid ${BRAND.panel}; text-align:center;">
-              <a href="${appUrl}" style="color:${BRAND.accent}; font-size:11px; text-decoration:none;">lesromains.com</a>
+              <a href="${appUrl}" style="color:${BRAND.accent}; font-size:11px; text-decoration:none;">${appUrl.replace(/^https?:\/\//, '')}</a>
               ${unsubscribeUrl ? `<div style="margin-top:10px;"><a href="${unsubscribeUrl}" style="color:${BRAND.muted}; font-size:10px; text-decoration:underline;">Unsubscribe from these emails</a></div>` : ''}
             </td>
           </tr>
